@@ -9,9 +9,15 @@ User=mz
 WorkingDirectory=/opt/bambuddy/spoolbuddy
 Environment=SPOOLBUDDY_BACKEND_URL=http://bambuddy:5000
 Environment=SPOOLBUDDY_API_KEY=bb_change_me
+# Alternative hardware: uncomment for an MFRC522 reader and HX711 scale
+#Environment=SPOOLBUDDY_NFC_DRIVER=mfrc522
+#Environment=SPOOLBUDDY_SCALE_DRIVER=hx711
 ExecStart=/opt/bambuddy/venv/bin/python -m daemon.main
 Restart=always
 RestartSec=5
+# The HX711 driver asks for SCHED_FIFO so a scheduler preemption cannot
+# hold PD_SCK high past the chip's 60us power-down threshold.
+AmbientCapabilities=CAP_SYS_NICE
 StandardOutput=journal
 StandardError=journal
 

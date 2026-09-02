@@ -18,6 +18,8 @@
 #   --api-key KEY        Bambuddy API key (required for spoolbuddy mode)
 #   --path PATH          Installation directory (default: /opt/spoolbuddy or /opt/bambuddy)
 #   --port PORT          Bambuddy port (full mode only, default: 8000)
+#   --nfc-driver NAME    NFC reader: "pn5180" (default) or "mfrc522"
+#   --scale-driver NAME  Load cell ADC: "nau7802" (default) or "hx711"
 #   --ssh-pubkey KEY     Bambuddy SSH public key for remote updates
 #   --yes, -y            Non-interactive mode, accept defaults
 #   --help, -h           Show this help message
@@ -59,6 +61,8 @@ DETECTED_INSTALLER_REF=""
 BAMBUDDY_URL=""
 API_KEY=""
 BAMBUDDY_PORT="8000"
+NFC_DRIVER="pn5180"       # or "mfrc522"
+SCALE_DRIVER="nau7802"    # or "hx711"
 NON_INTERACTIVE="false"
 REBOOT_NEEDED="false"
 KIOSK_USER=""            # auto-detected from $SUDO_USER
@@ -200,6 +204,8 @@ show_help() {
     echo "  --api-key KEY        Bambuddy API key (required for spoolbuddy mode)"
     echo "  --path PATH          Installation directory (default: /opt/spoolbuddy or /opt/bambuddy)"
     echo "  --port PORT          Bambuddy port (full mode only, default: 8000)"
+    echo "  --nfc-driver NAME    NFC reader: pn5180 (default) or mfrc522"
+    echo "  --scale-driver NAME  Load cell ADC: nau7802 (default) or hx711"
     echo "  --ssh-pubkey KEY     Bambuddy SSH public key for remote updates"
     echo "  --yes, -y            Non-interactive mode, accept defaults"
     echo "  --help, -h           Show this help message"
@@ -401,26 +407,41 @@ configure_boot_config() {
         sed -i "s/^# SpoolBuddy: I2C bus 0 for NAU7802 scale (GPIO0\/GPIO1)$/# SpoolBuddy: I2C bus 1 for NAU7802 scale (GPIO2\/GPIO3)/" "$boot_config"
     fi
 
-    # Ensure I2C bus 1 (GPIO2/GPIO3) is enabled for NAU7802 scale
-    if ! grep -q "^dtparam=i2c_arm=on" "$boot_config"; then
-        echo "" >> "$boot_config"
-        echo "# SpoolBuddy: I2C bus 1 for NAU7802 scale (GPIO2/GPIO3)" >> "$boot_config"
-        echo "dtparam=i2c_arm=on" >> "$boot_config"
-        REBOOT_NEEDED="true"
-        success "Added dtparam=i2c_arm=on"
+    # I2C bus 1 (GPIO2/GPIO3) carries the NAU7802. The HX711 is bit-banged on
+    # plain GPIO and needs no bus.
+    if [[ "$SCALE_DRIVER" == "nau7802" ]]; then
+        if ! grep -q "^dtparam=i2c_arm=on" "$boot_config"; then
+            echo "" >> "$boot_config"
+            echo "# SpoolBuddy: I2C bus 1 for NAU7802 scale (GPIO2/GPIO3)" >> "$boot_config"
+            echo "dtparam=i2c_arm=on" >> "$boot_config"
+            REBOOT_NEEDED="true"
+            success "Added dtparam=i2c_arm=on"
+        else
+            success "dtparam=i2c_arm=on already set"
+        fi
     else
-        success "dtparam=i2c_arm=on already set"
+        info "Scale driver is $SCALE_DRIVER — I2C not required"
     fi
 
-    # Disable SPI auto chip-select (manual CS on GPIO23 for PN5180)
-    if ! grep -q "^dtoverlay=spi0-0cs" "$boot_config"; then
-        echo "" >> "$boot_config"
-        echo "# SpoolBuddy: Disable SPI auto CS (manual CS on GPIO23 for PN5180)" >> "$boot_config"
-        echo "dtoverlay=spi0-0cs" >> "$boot_config"
+    # The PN5180 needs manual chip select on GPIO23 because the SPI driver's
+    # automatic CS timing is too fast for it, so CE0 is removed entirely.
+    # The MFRC522 uses CE0 and breaks if that overlay is present.
+    if [[ "$NFC_DRIVER" == "pn5180" ]]; then
+        if ! grep -q "^dtoverlay=spi0-0cs" "$boot_config"; then
+            echo "" >> "$boot_config"
+            echo "# SpoolBuddy: Disable SPI auto CS (manual CS on GPIO23 for PN5180)" >> "$boot_config"
+            echo "dtoverlay=spi0-0cs" >> "$boot_config"
+            REBOOT_NEEDED="true"
+            success "Added dtoverlay=spi0-0cs"
+        else
+            success "dtoverlay=spi0-0cs already set"
+        fi
+    elif grep -q "^dtoverlay=spi0-0cs" "$boot_config"; then
+        sed -i "s/^dtoverlay=spi0-0cs$/# dtoverlay=spi0-0cs (disabled: $NFC_DRIVER uses hardware CE0)/" "$boot_config"
         REBOOT_NEEDED="true"
-        success "Added dtoverlay=spi0-0cs"
+        warn "Disabled dtoverlay=spi0-0cs — it removes CE0, which $NFC_DRIVER needs"
     else
-        success "dtoverlay=spi0-0cs already set"
+        success "dtoverlay=spi0-0cs absent, as $NFC_DRIVER requires"
     fi
 }
 
@@ -561,6 +582,17 @@ setup_spoolbuddy_venv() {
     chown -R "$SPOOLBUDDY_SERVICE_USER:$SPOOLBUDDY_SERVICE_USER" "$INSTALL_PATH/spoolbuddy/venv"
 }
 
+scale_env_block() {
+    if [[ "$SCALE_DRIVER" == "hx711" ]]; then
+        echo "# HX711 bit-banged pins (BCM numbering)"
+        echo "SPOOLBUDDY_SCALE_DT_PIN=5"
+        echo "SPOOLBUDDY_SCALE_SCK_PIN=6"
+    else
+        echo "# NAU7802 scale bus (RPi GPIO2/GPIO3)"
+        echo "SPOOLBUDDY_I2C_BUS=1"
+    fi
+}
+
 create_spoolbuddy_env() {
     info "Creating SpoolBuddy configuration..."
 
@@ -576,8 +608,10 @@ SPOOLBUDDY_BACKEND_URL=$BAMBUDDY_URL
 # API key (create one in Bambuddy Settings -> API Keys)
 SPOOLBUDDY_API_KEY=$API_KEY
 
-# NAU7802 scale bus (RPi GPIO2/GPIO3)
-SPOOLBUDDY_I2C_BUS=1
+# Hardware drivers
+SPOOLBUDDY_NFC_DRIVER=$NFC_DRIVER
+SPOOLBUDDY_SCALE_DRIVER=$SCALE_DRIVER
+$(scale_env_block)
 EOF
 
     chown "$SPOOLBUDDY_SERVICE_USER:$SPOOLBUDDY_SERVICE_USER" "$env_file"
@@ -665,6 +699,9 @@ EnvironmentFile=$INSTALL_PATH/spoolbuddy/.env
 ExecStart=$INSTALL_PATH/spoolbuddy/venv/bin/python -m daemon.main
 Restart=always
 RestartSec=5
+# The HX711 driver asks for SCHED_FIFO so a scheduler preemption cannot
+# hold PD_SCK high past the chip's 60us power-down threshold.
+AmbientCapabilities=CAP_SYS_NICE
 StandardOutput=journal
 StandardError=journal
 
@@ -1377,6 +1414,22 @@ parse_args() {
                 ;;
             --port)
                 BAMBUDDY_PORT="$2"
+                shift 2
+                ;;
+            --nfc-driver)
+                NFC_DRIVER="$(echo "$2" | tr "[:upper:]" "[:lower:]")"
+                case "$NFC_DRIVER" in
+                    pn5180|mfrc522) ;;
+                    *) error "Unknown --nfc-driver '$NFC_DRIVER' (expected pn5180 or mfrc522)";;
+                esac
+                shift 2
+                ;;
+            --scale-driver)
+                SCALE_DRIVER="$(echo "$2" | tr "[:upper:]" "[:lower:]")"
+                case "$SCALE_DRIVER" in
+                    nau7802|hx711) ;;
+                    *) error "Unknown --scale-driver '$SCALE_DRIVER' (expected nau7802 or hx711)";;
+                esac
                 shift 2
                 ;;
             --ssh-pubkey)

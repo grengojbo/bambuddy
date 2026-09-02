@@ -9,26 +9,16 @@ Key learnings from pico-nfc-bridge.ino:
 - HKDF-SHA256 derives per-sector keys from master key + UID
 """
 
-import hashlib
-import hmac
 import logging
-import os
 import time
 
 import gpiod
 import spidev
 
+from .bambu_keys import BAMBU_BLOCKS, get_sector_key, hkdf_derive_keys
+from .hw_util import env_int as _env_int, find_gpio_chip as _find_gpio_chip
+
 logger = logging.getLogger(__name__)
-
-
-def _env_int(name: str, default: int) -> int:
-    value = os.environ.get(name)
-    if value is None or value == "":
-        return default
-    try:
-        return int(value)
-    except ValueError:
-        return default
 
 
 BUSY_PIN = _env_int("SPOOLBUDDY_NFC_BUSY_PIN", 25)
@@ -38,71 +28,14 @@ SPI_BUS = _env_int("SPOOLBUDDY_NFC_SPI_BUS", 0)
 SPI_DEVICE = _env_int("SPOOLBUDDY_NFC_SPI_DEVICE", 0)
 SPI_SPEED_HZ = _env_int("SPOOLBUDDY_NFC_SPI_SPEED_HZ", 500_000)
 
-# Bambu Lab MIFARE Classic key derivation constants (from pico-nfc-bridge.ino)
-BAMBU_MASTER_KEY = bytes(
-    [
-        0x9A,
-        0x75,
-        0x9C,
-        0xF2,
-        0xC4,
-        0xF7,
-        0xCA,
-        0xFF,
-        0x22,
-        0x2C,
-        0xB9,
-        0x76,
-        0x9B,
-        0x41,
-        0xBC,
-        0x96,
-    ]
-)
-BAMBU_CONTEXT = b"RFID-A\x00"  # 7 bytes including null terminator
-
-# Blocks to read for Bambu tag data
-BAMBU_BLOCKS = [1, 2, 4, 5]
-
-
-def hkdf_derive_keys(uid: bytes) -> bytes:
-    """Derive 96 bytes of MIFARE key material (16 sectors * 6 bytes each).
-
-    Uses HKDF-SHA256 with the Bambu master key as salt and the tag UID as IKM.
-    """
-    # HKDF-Extract: PRK = HMAC-SHA256(salt=master_key, IKM=uid)
-    prk = hmac.new(BAMBU_MASTER_KEY, uid, hashlib.sha256).digest()
-
-    # HKDF-Expand: generate 96 bytes using context "RFID-A\0"
-    okm = b""
-    t = b""
-    counter = 1
-    while len(okm) < 96:
-        t = hmac.new(prk, t + BAMBU_CONTEXT + bytes([counter]), hashlib.sha256).digest()
-        okm += t
-        counter += 1
-    return okm[:96]
-
-
-def get_sector_key(keys: bytes, block: int) -> bytes:
-    """Get the 6-byte key for the sector containing the given block."""
-    sector = block // 4
-    return keys[sector * 6 : sector * 6 + 6]
-
-
-def _find_gpio_chip():
-    for path in ["/dev/gpiochip4", "/dev/gpiochip0"]:
-        try:
-            chip = gpiod.Chip(path)
-            if "pinctrl" in chip.get_info().label:
-                return chip
-            chip.close()
-        except (FileNotFoundError, PermissionError, OSError):
-            continue
-    raise RuntimeError("No GPIO chip")
-
 
 class PN5180:
+    reader_type = "PN5180"
+    connection = "SPI"
+    # activate_type_a() wedges the chip when it finds nothing, so NFCReader
+    # must re-run the RF init before every idle poll to recover it.
+    needs_reset_before_poll = True
+
     def __init__(self):
         self._chip = _find_gpio_chip()
         self._lines = self._chip.request_lines(
