@@ -1,8 +1,14 @@
 # Local development stack for this fork.
 #
-#   docker compose -f docker-compose.dev.yml up -d              # bambuddy + OrcaSlicer sidecar
-#   docker compose -f docker-compose.dev.yml --profile bambu up -d   # + BambuStudio sidecar
+#   docker compose -f docker-compose.dev.yml up -d                    # bambuddy alone
 #   docker compose -f docker-compose.dev.yml logs -f bambuddy
+#
+# The slicer sidecars are optional and off by default — Bambuddy only needs
+# them when "Use Slicer API" is on in Settings → Slicer. Start them explicitly
+# if a change touches the slicing path:
+#
+#   docker compose -f docker-compose.dev.yml --profile slicer up -d   # + OrcaSlicer
+#   docker compose -f docker-compose.dev.yml --profile bambu up -d    # + BambuStudio
 #
 # The container brings the runtime (Python deps, ffmpeg, tailscale CLI) from
 # the fork's published image, but runs the *working tree's* backend/ mounted
@@ -10,9 +16,9 @@
 # restarts. The frontend is not served from here during development — run
 # `cd frontend && npm run dev` on the host; vite proxies /api to :8000.
 #
-# `slicer-api/docker-compose.yml` is an upstream file and stays untouched;
-# the two sidecars are redeclared here so the whole dev stack is one command
-# and shares one network.
+# `slicer-api/docker-compose.yml` is an upstream file and stays untouched; the
+# two sidecars are redeclared here, behind profiles, so the dev stack is one
+# command and one network when they are wanted and out of the way when not.
 #
 # Networking: this is bridge mode, not host mode — Docker Desktop and Colima
 # on macOS have no host networking. Outbound to the printers on the LAN works
@@ -45,8 +51,10 @@ services:
       PUID: ${PUID:-501}
       PGID: ${PGID:-20}
       PORT: "8000"
-      # Sidecars are reachable by service name inside the compose network,
-      # on their internal port 3000 — not on the host-side 3003/3001.
+      # Sidecars are reachable by service name inside the compose network, on
+      # their internal port 3000 — not on the host-side 3003/3001. Harmless
+      # when the profiles are off: Bambuddy only dials these once "Use Slicer
+      # API" is enabled in Settings.
       SLICER_API_URL: http://orca-slicer-api:3000
       BAMBU_STUDIO_API_URL: http://bambu-studio-api:3000
     # --reload needs an explicit reload-dir: the default watches the whole CWD,
@@ -63,9 +71,10 @@ services:
       start_period: 20s
       retries: 3
 
-  # Both sidecars are linux/amd64 only — on Apple Silicon they run under
-  # Rosetta/QEMU emulation and slicing is several times slower than on the
-  # production host. Fine for exercising the code path, not for benchmarking.
+  # Both sidecars are linux/amd64 only — on Apple Silicon they run emulated and
+  # slicing is several times slower than on the production host. Fine for
+  # exercising the code path, not for benchmarking. Neither starts unless its
+  # profile is named, so the everyday `up -d` is just the backend.
   orca-slicer-api:
     image: ghcr.io/maziggy/orca-slicer-api:${SIDECAR_TAG:-latest}
     container_name: orca-slicer-api-dev
@@ -84,6 +93,8 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
+    profiles:
+      - slicer
 
   bambu-studio-api:
     image: ghcr.io/maziggy/bambu-studio-api:${SIDECAR_TAG:-latest}

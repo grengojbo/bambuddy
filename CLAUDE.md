@@ -279,10 +279,13 @@ HX711 працює тільки через mmap `/dev/gpiomem`; kiosk-режим
 ## Локальна розробка
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d          # bambuddy + OrcaSlicer сайдкар
-docker compose -f docker-compose.dev.yml --profile bambu up -d   # + BambuStudio
-cd frontend && npm run dev                              # фронт на хості, vite проксить /api
-scripts/dev-restore.sh                                  # залити бекап прода в локальну копію
+docker compose -f docker-compose.dev.yml up -d           # тільки bambuddy
+cd frontend && npm run dev                               # фронт на хості, vite проксить /api
+scripts/dev-restore.sh                                   # залити бекап прода в локальну копію
+
+# слайсер-сайдкари — за профілями, потрібні лише коли ввімкнено «Use Slicer API»
+docker compose -f docker-compose.dev.yml --profile slicer up -d   # + OrcaSlicer
+docker compose -f docker-compose.dev.yml --profile bambu up -d    # + BambuStudio
 ```
 
 Контейнер бере рантайм із `ghcr.io/grengojbo/bambuddy`, але монтує `backend/` з
