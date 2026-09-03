@@ -1,6 +1,7 @@
 """Scale reader wrapper with stability detection and calibration."""
 
 import logging
+import os
 import time
 from collections import deque
 
@@ -9,8 +10,28 @@ logger = logging.getLogger(__name__)
 MOVING_AVG_SIZE = 20
 
 
+def _describe(scale) -> str:
+    """Human-readable summary of the active driver for the startup log."""
+    describe = getattr(scale, "describe", None)
+    if callable(describe):
+        return describe()
+    return f"NAU7802 on I2C bus {getattr(scale, '_bus_num', '?')}"
+
+
+def _open_driver(driver: str):
+    """Instantiate the configured load cell ADC."""
+    if driver == "hx711":
+        from .hx711 import HX711
+
+        return HX711()
+
+    from .nau7802 import NAU7802
+
+    return NAU7802()
+
+
 class ScaleReader:
-    def __init__(self, tare_offset: int = 0, calibration_factor: float = 1.0):
+    def __init__(self, tare_offset: int = 0, calibration_factor: float = 1.0, driver: str | None = None):
         self._scale = None
         self._tare_offset = tare_offset
         self._calibration_factor = calibration_factor
@@ -19,21 +40,21 @@ class ScaleReader:
         self._ok = False
         self._last_raw = 0
 
-        try:
-            from .nau7802 import NAU7802
+        if driver is None:
+            driver = os.environ.get("SPOOLBUDDY_SCALE_DRIVER", "nau7802").strip().lower() or "nau7802"
 
-            self._scale = NAU7802()
+        try:
+            self._scale = _open_driver(driver)
             self._scale.init()
             self._ok = True
-            bus_num = getattr(self._scale, "_bus_num", "?")
             logger.info(
-                "Scale initialized on I2C bus %s (tare=%d, cal=%.6f)",
-                bus_num,
+                "Scale initialized: %s (tare=%d, cal=%.6f)",
+                _describe(self._scale),
                 tare_offset,
                 calibration_factor,
             )
         except Exception as e:
-            logger.info("Scale not available: %s", e)
+            logger.info("Scale not available (driver=%s): %s", driver, e)
 
     @property
     def ok(self) -> bool:

@@ -10,12 +10,26 @@ Required:
 Optional:
     SPOOLBUDDY_DEVICE_ID    — Unique device identifier (default: derived from MAC)
     SPOOLBUDDY_HOSTNAME     — Display name (default: system hostname)
+    SPOOLBUDDY_NFC_DRIVER   — NFC frontend: pn5180 (default) or mfrc522
+    SPOOLBUDDY_SCALE_DRIVER — Load cell ADC: nau7802 (default) or hx711
 """
 
 import os
 import socket
 from dataclasses import dataclass
 from pathlib import Path
+
+NFC_DRIVERS = ("pn5180", "mfrc522")
+SCALE_DRIVERS = ("nau7802", "hx711")
+
+
+def _driver(env_var: str, default: str, allowed: tuple[str, ...]) -> str:
+    value = os.environ.get(env_var, "").strip().lower()
+    if not value:
+        return default
+    if value not in allowed:
+        raise RuntimeError(f"{env_var}={value!r} is not supported (expected one of: {', '.join(allowed)})")
+    return value
 
 
 @dataclass
@@ -35,6 +49,9 @@ class Config:
     tare_offset: int = 0
     calibration_factor: float = 1.0
 
+    nfc_driver: str = "pn5180"
+    scale_driver: str = "nau7802"
+
     @classmethod
     def load(cls) -> "Config":
         cfg = cls()
@@ -43,6 +60,9 @@ class Config:
         cfg.api_key = os.environ.get("SPOOLBUDDY_API_KEY", "")
         cfg.device_id = os.environ.get("SPOOLBUDDY_DEVICE_ID", "")
         cfg.hostname = os.environ.get("SPOOLBUDDY_HOSTNAME", "")
+
+        cfg.nfc_driver = _driver("SPOOLBUDDY_NFC_DRIVER", cfg.nfc_driver, NFC_DRIVERS)
+        cfg.scale_driver = _driver("SPOOLBUDDY_SCALE_DRIVER", cfg.scale_driver, SCALE_DRIVERS)
 
         if not cfg.backend_url:
             raise RuntimeError("SPOOLBUDDY_BACKEND_URL is required (e.g. http://192.168.1.100:5000)")

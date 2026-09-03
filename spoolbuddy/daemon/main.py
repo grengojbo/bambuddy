@@ -433,10 +433,11 @@ async def main():
     start_time = time.monotonic()
 
     # Initialize hardware before registration so we can report capabilities
-    nfc = NFCReader()
+    nfc = NFCReader(driver=config.nfc_driver)
     scale = ScaleReader(
         tare_offset=config.tare_offset,
         calibration_factor=config.calibration_factor,
+        driver=config.scale_driver,
     )
     display = DisplayControl()
 

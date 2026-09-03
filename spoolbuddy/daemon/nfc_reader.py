@@ -1,8 +1,11 @@
 """NFC reader wrapper with state machine for tag presence detection."""
 
 import logging
+import os
 import time
 from enum import Enum, auto
+
+from .bambu_keys import TRAY_UUID_BLOCK
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +18,20 @@ class NFCState(Enum):
     TAG_PRESENT = auto()
 
 
+def _open_driver(driver: str):
+    """Instantiate the configured NFC frontend."""
+    if driver == "mfrc522":
+        from .mfrc522 import MFRC522
+
+        return MFRC522()
+
+    from .pn5180 import PN5180
+
+    return PN5180()
+
+
 class NFCReader:
-    def __init__(self):
+    def __init__(self, driver: str | None = None):
         self._nfc = None
         self._state = NFCState.IDLE
         self._current_uid: str | None = None
@@ -27,15 +42,16 @@ class NFCReader:
         self._poll_count = 0
         self._last_status_log = 0.0
 
-        try:
-            from .pn5180 import PN5180
+        if driver is None:
+            driver = os.environ.get("SPOOLBUDDY_NFC_DRIVER", "pn5180").strip().lower() or "pn5180"
 
-            self._nfc = PN5180()
+        try:
+            self._nfc = _open_driver(driver)
             self._init_rf()
             self._ok = True
-            logger.info("NFC reader initialized")
+            logger.info("NFC reader initialized (%s)", self.reader_type)
         except Exception as e:
-            logger.warning("NFC not available: %s", e)
+            logger.warning("NFC not available (driver=%s): %s", driver, e)
 
     def _init_rf(self):
         """Full RF initialization sequence."""
@@ -60,12 +76,12 @@ class NFCReader:
     @property
     def reader_type(self) -> str:
         """Return NFC reader hardware type."""
-        return "PN5180" if self._nfc is not None else "Unknown"
+        return getattr(self._nfc, "reader_type", "Unknown") if self._nfc is not None else "Unknown"
 
     @property
     def connection(self) -> str:
         """Return NFC reader connection type."""
-        return "SPI" if self._nfc is not None else "None"
+        return getattr(self._nfc, "connection", "SPI") if self._nfc is not None else "None"
 
     @property
     def ok(self) -> bool:
@@ -149,10 +165,14 @@ class NFCReader:
             # silently fail even when a tag is present. Only a full RST pin toggle
             # recovers the reader. ~240ms overhead per poll, giving ~1.8 Hz poll
             # rate which is fine for a spool tag reader.
-            try:
-                self._init_rf()
-            except Exception as e:
-                logger.warning("NFC pre-poll reset failed: %s", e)
+            #
+            # The MFRC522 has no such quirk and opts out via the flag, which
+            # gets its poll rate back up to the configured interval.
+            if getattr(self._nfc, "needs_reset_before_poll", True):
+                try:
+                    self._init_rf()
+                except Exception as e:
+                    logger.warning("NFC pre-poll reset failed: %s", e)
         else:
             # Tag present: light RF cycle to reset card from ACTIVE back to IDLE
             # state after previous SELECT, so it responds to the next WUPA/REQA.
@@ -239,27 +259,18 @@ class NFCReader:
 
 
 def _extract_tray_uuid(blocks: dict[int, bytes]) -> str | None:
-    """Extract tray_uuid from Bambu MIFARE Classic data blocks."""
-    # Block 4-5 contain the tray UUID as 32 ASCII hex chars across 32 bytes.
-    if 4 in blocks and 5 in blocks:
-        raw = blocks[4] + blocks[5]
-        try:
-            # Preferred path: decode full ASCII payload, keep only hex chars.
-            ascii_candidate = raw.decode("ascii", errors="ignore")
-            hex_chars = "".join(ch for ch in ascii_candidate if ch in "0123456789abcdefABCDEF")
-            if len(hex_chars) >= 32:
-                uuid_str = hex_chars[:32].upper()
-                if uuid_str != "0" * 32:
-                    return uuid_str
-        except Exception:
-            pass
+    """Extract tray_uuid from Bambu MIFARE Classic data blocks.
 
-        try:
-            # Fallback for partially decoded payloads: use first 16 raw bytes as hex.
-            # This preserves compatibility with older decoding behavior.
-            uuid_str = raw[:16].hex().upper()
-            if uuid_str and uuid_str != "0" * 32:
-                return uuid_str
-        except Exception:
-            pass
-    return None
+    The tray UID lives in block 9 as 16 raw bytes. Blocks 4 and 5 — which an
+    earlier version of this function read instead — hold the detailed filament
+    type and the colour/weight/diameter record, so they are identical across
+    every spool of a given product and cannot identify one.
+    """
+    raw = blocks.get(TRAY_UUID_BLOCK)
+    if not raw or len(raw) < 16:
+        return None
+
+    uuid_str = raw[:16].hex().upper()
+    if uuid_str == "0" * 32 or uuid_str == "F" * 32:
+        return None
+    return uuid_str
