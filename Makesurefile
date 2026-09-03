@@ -12,12 +12,27 @@
 
 @options timing
 
-@define COMPOSE "docker compose"
 @define DEV_PORT "8000"
 @define VITE_PORT "5173"
 @define TS_HOST "bambuddy-dev"
 
+@lib compose
+  # Compose ships two ways — as a `docker compose` plugin and as a standalone
+  # `docker-compose` binary — and a machine can have either. Pick what answers
+  # instead of assuming.
+  dc() {
+    if docker compose version >/dev/null 2>&1; then
+      docker compose "$@"
+    else
+      docker-compose "$@"
+    fi
+  }
+
 # ---------------------------------------------------------------- preconditions
+
+@goal default
+@doc 'Bare `./makesure` lists what there is to run'
+  ./makesure -l
 
 @goal docker_up @private
 @doc 'Fail early with a useful message when the Docker VM is not running'
@@ -52,7 +67,8 @@
 @goal up
 @depends_on docker_up
 @doc 'Start the dev stack (backend + frontend) on localhost'
-  $COMPOSE up -d
+@use_lib compose
+  dc up -d
   echo
   echo "  UI       http://localhost:$VITE_PORT"
   echo "  API      http://localhost:$DEV_PORT"
@@ -65,42 +81,53 @@
 @depends_on docker_up
 @depends_on tailnet_configured
 @doc 'Start the dev stack and publish it on the tailnet as bambuddy-dev'
-  $COMPOSE --profile ts up -d
+@use_lib compose
+  dc --profile ts up -d
   echo
   echo "  UI       https://$TS_HOST.<tailnet>.ts.net"
   echo "  local    http://localhost:$VITE_PORT"
   echo
   echo "The exact name is in the sidecar's first log lines:"
-  echo "  $COMPOSE logs tailscale | head"
+  echo "  dc logs tailscale | head"
 
 @goal down
+@depends_on docker_up
 @doc 'Stop the dev stack, tailnet sidecar included'
-  $COMPOSE --profile ts down
+@use_lib compose
+  dc --profile ts down
 
 @goal restart
 @depends_on docker_up
 @doc 'Restart the backend container (needed after a restore)'
-  $COMPOSE restart bambuddy
+@use_lib compose
+  dc restart bambuddy
 
 @goal logs
+@depends_on docker_up
 @doc 'Follow the backend log'
-  $COMPOSE logs -f bambuddy
+@use_lib compose
+  dc logs -f bambuddy
 
 @goal logs-frontend
+@depends_on docker_up
 @doc 'Follow the vite log'
-  $COMPOSE logs -f frontend
+@use_lib compose
+  dc logs -f frontend
 
 @goal ps
+@depends_on docker_up
 @doc 'What is running'
-  $COMPOSE --profile ts ps
+@use_lib compose
+  dc --profile ts ps
 
 # ------------------------------------------------------------------------ data
 
 @goal deps
 @depends_on docker_up
 @doc 'Force a clean npm ci in the frontend container'
-  $COMPOSE exec frontend rm -f node_modules/.lock-hash
-  $COMPOSE restart frontend
+@use_lib compose
+  dc exec frontend rm -f node_modules/.lock-hash
+  dc restart frontend
   echo "Reinstalling — watch it with: ./makesure logs-frontend"
 
 @goal restore
@@ -111,8 +138,9 @@
 @goal pull
 @depends_on docker_up
 @doc 'Pull a newer fork image and recreate the backend'
-  $COMPOSE pull bambuddy
-  $COMPOSE up -d bambuddy
+@use_lib compose
+  dc pull bambuddy
+  dc up -d bambuddy
 
 # --------------------------------------------------------------------- quality
 
