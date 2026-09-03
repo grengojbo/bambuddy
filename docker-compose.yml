@@ -111,12 +111,20 @@ services:
       # Set when serving through Tailscale, so vite accepts that Host header
       # and points HMR at the wss:// endpoint instead of the local one.
       TS_HOSTNAME: ${TS_HOSTNAME:-}
-    # npm ci only when the volume is empty — every later start goes straight to
-    # vite. `exec` keeps vite as PID 1 so `docker stop` actually reaches it.
+    # Reinstall only when the lockfile actually changed — an upstream merge
+    # that bumps a dependency is picked up on the next start, and every other
+    # start goes straight to vite. `exec` keeps vite as PID 1 so `docker stop`
+    # reaches it instead of the shell.
     command:
       - sh
       - -c
-      - '[ -d node_modules/vite ] || npm ci; exec npm run dev -- --config vite.config.dev.ts --host 0.0.0.0'
+      - |
+        want=$$(md5sum package-lock.json | cut -d' ' -f1)
+        if [ ! -f node_modules/.lock-hash ] || [ "$$want" != "$$(cat node_modules/.lock-hash)" ]; then
+          echo "Installing dependencies (lockfile changed)..."
+          npm ci && printf '%s' "$$want" > node_modules/.lock-hash
+        fi
+        exec npm run dev -- --config vite.config.dev.ts --host 0.0.0.0
     depends_on:
       - bambuddy
 

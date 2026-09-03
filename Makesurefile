@@ -12,10 +12,10 @@
 
 @options timing
 
-@define COMPOSE='docker compose'
-@define DEV_PORT='8000'
-@define VITE_PORT='5173'
-@define TS_HOST='bambuddy-dev'
+@define COMPOSE "docker compose"
+@define DEV_PORT "8000"
+@define VITE_PORT "5173"
+@define TS_HOST "bambuddy-dev"
 
 # ---------------------------------------------------------------- preconditions
 
@@ -57,7 +57,8 @@
   echo "  UI       http://localhost:$VITE_PORT"
   echo "  API      http://localhost:$DEV_PORT"
   echo
-  echo "First start installs node_modules — give the frontend a minute:"
+  echo "The frontend installs node_modules on its first start, and again"
+  echo "whenever package-lock.json changes:"
   echo "  ./makesure logs-frontend"
 
 @goal ts
@@ -94,6 +95,13 @@
   $COMPOSE --profile ts ps
 
 # ------------------------------------------------------------------------ data
+
+@goal deps
+@depends_on docker_up
+@doc 'Force a clean npm ci in the frontend container'
+  $COMPOSE exec frontend rm -f node_modules/.lock-hash
+  $COMPOSE restart frontend
+  echo "Reinstalling — watch it with: ./makesure logs-frontend"
 
 @goal restore
 @depends_on docker_up
