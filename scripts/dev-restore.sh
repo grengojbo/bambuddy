@@ -8,9 +8,14 @@
 #   scripts/dev-restore.sh --keep-settings     # leave production URLs as they are
 #
 # The backup is restored verbatim — virtual printers, smart plugs and their
-# settings come across exactly as production has them. Two Bambuddy instances
-# then talk to the same printers, so decide in the local UI what to switch off
-# before letting it run unattended.
+# settings come across exactly as production has them (external_url excepted,
+# see --keep-settings). Two Bambuddy instances then talk to the same printers,
+# so decide in the local UI what to switch off before letting it run unattended.
+#
+# Files are unpacked straight into the bind-mounted data directory rather than
+# posted to /api/v1/settings/restore: that endpoint needs a logged-in session
+# (API keys are denied settings:restore), and the first restore is what enables
+# authentication, so the HTTP path breaks exactly when it starts being needed.
 #
 # Environment:
 #   BAMBUDDY_PROD_URL   the production instance to copy from (required; the
@@ -20,9 +25,7 @@
 #                       are denied settings:backup by design, so the download
 #                       path only works for a session that is allowed it —
 #                       in practice, hand the script a ZIP saved from the UI.
-#   BAMBUDDY_DEV_URL    default http://localhost:8000
-#   BAMBUDDY_DEV_KEY    only needed if auth is enabled in the local copy
-#                       (it will be, once production data is restored)
+#   BAMBUDDY_DEV_URL    default http://localhost:8000, used for the health check
 #   TS_HOSTNAME         when set, the restored copy's external_url is pointed
 #                       at https://$TS_HOSTNAME instead of localhost
 
@@ -34,7 +37,7 @@ cd "$(git rev-parse --show-toplevel)"
 # script needs from there too rather than making the shell profile carry a
 # second copy. Only known keys are taken, and only when not already exported.
 if [ -f .env ]; then
-    for key in BAMBUDDY_PROD_URL BAMBUDDY_API_KEY BAMBUDDY_DEV_URL BAMBUDDY_DEV_KEY TS_HOSTNAME VITE_PORT; do
+    for key in BAMBUDDY_PROD_URL BAMBUDDY_API_KEY BAMBUDDY_DEV_URL TS_HOSTNAME VITE_PORT; do
         eval "current=\${$key:-}"
         if [ -z "$current" ]; then
             value=$(sed -n "s/^${key}=//p" .env | head -1)
@@ -162,14 +165,7 @@ if [ "$DOWNLOAD_ONLY" = true ]; then
     exit 0
 fi
 
-echo "==> Checking the dev instance at $DEV_URL"
-if ! curl -sSf -o /dev/null "$DEV_URL/health"; then
-    echo "Dev instance is not answering. Start it first:" >&2
-    echo "  docker compose up -d" >&2
-    exit 1
-fi
-
-echo "==> Restoring into the dev instance"
+echo "==> Restoring into the dev copy"
 echo "    This replaces its database and data directories."
 if [ "$ASSUME_YES" = true ]; then
     echo "    --yes given, going ahead."
@@ -182,40 +178,88 @@ else
     exit 1
 fi
 
-code=$(curl -sS -o /tmp/bambuddy-restore-response.json -w '%{http_code}' \
-    -X POST \
-    -H "$(auth_header "${BAMBUDDY_DEV_KEY:-}")" \
-    -F "file=@${ZIP}" \
-    "$DEV_URL/api/v1/settings/restore")
+# The unpacking is done on the host, not through POST /settings/restore.
+# That endpoint needs a logged-in session — settings:restore is denied to API
+# keys — and the very first restore is what turns authentication on, so the
+# HTTP path stops working exactly when you start needing it. /app/data is a
+# bind mount, so writing the files directly is both simpler and auth-free; the
+# set of things replaced mirrors restore_backup() in
+# backend/app/api/routes/settings.py.
+DATA_DIR="dev-data/data"
 
-if [ "$code" != "200" ]; then
-    echo "Restore failed (HTTP $code):" >&2
-    cat /tmp/bambuddy-restore-response.json >&2; echo >&2
-    exit 1
-fi
-cat /tmp/bambuddy-restore-response.json; echo
+echo "==> Stopping the backend"
+compose stop bambuddy >/dev/null 2>&1 || true
+
+python3 - "$ZIP" "$DATA_DIR" <<'PYEOF'
+import os
+import shutil
+import sys
+import zipfile
+from pathlib import Path
+
+zip_path, data_dir = Path(sys.argv[1]), Path(sys.argv[2])
+data_dir.mkdir(parents=True, exist_ok=True)
+
+# Same five directories the restore endpoint replaces, plus the two files.
+DIRS = ("archive", "virtual_printer", "plate_calibration", "icons", "projects")
+
+with zipfile.ZipFile(zip_path) as zf:
+    names = zf.namelist()
+    if "bambuddy.db" not in names:
+        sys.exit("Invalid backup: no bambuddy.db inside")
+    # Reject path-traversal entries before extracting anything (ZipSlip).
+    root = data_dir.resolve()
+    for name in names:
+        if not (root / name).resolve().is_relative_to(root):
+            sys.exit(f"Invalid backup: unsafe path {name!r}")
+
+    # A stale WAL alongside a swapped database silently resurrects rows from
+    # the copy being replaced, so both sidecars go before the file does.
+    for suffix in ("", "-wal", "-shm"):
+        (data_dir / f"bambuddy.db{suffix}").unlink(missing_ok=True)
+
+    for name in ("bambuddy.db", ".mfa_encryption_key"):
+        if name in names:
+            with zf.open(name) as src, open(data_dir / name, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            print(f"  restored {name}")
+
+    for directory in DIRS:
+        members = [n for n in names if n.startswith(f"{directory}/") and not n.endswith("/")]
+        if not members:
+            continue
+        dest = data_dir / directory
+        if dest.exists():
+            shutil.rmtree(dest)
+        for member in members:
+            target = data_dir / member
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(member) as src, open(target, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+        print(f"  restored {directory}/ ({len(members)} files)")
+
+os.chmod(data_dir / ".mfa_encryption_key", 0o600) if (data_dir / ".mfa_encryption_key").exists() else None
+PYEOF
 
 # The backup carries the production instance's own addresses. external_url is
-# the one that matters: it is what notification images and label QR codes are
-# built from, so left alone the dev copy hands out links into production.
-# Written straight to SQLite because API keys are denied SETTINGS_UPDATE, and
-# before the restart below so the app picks it up on its way back.
+# what notification images and label QR codes are built from, so left alone the
+# dev copy hands out links into production.
 if [ "$LOCALIZE" = true ]; then
     new_url="${TS_HOSTNAME:+https://$TS_HOSTNAME}"
     : "${new_url:=http://localhost:${VITE_PORT:-5173}}"
     echo
     echo "==> Pointing external_url at this instance: $new_url"
-    compose exec -T bambuddy python - "$new_url" <<'PYEOF' || echo "  (skipped — could not reach the container)"
+    python3 - "$DATA_DIR/bambuddy.db" "$new_url" <<'PYEOF'
 import sqlite3, sys
 
-url = sys.argv[1]
-db = sqlite3.connect("/app/data/bambuddy.db")
+db = sqlite3.connect(sys.argv[1])
+url = sys.argv[2]
 old = db.execute("select value from settings where key='external_url'").fetchone()
 db.execute("update settings set value=? where key='external_url'", (url,))
 db.commit()
 print(f"  external_url: {old[0] if old else '(unset)'} -> {url}")
 
-# Not touched, but worth knowing about: these keep pointing at production.
+# Left alone, because what they should be depends on where the stack runs.
 for key in ("ha_url", "orcaslicer_api_url", "bambu_studio_api_url"):
     row = db.execute("select value from settings where key=?", (key,)).fetchone()
     if row and row[0]:
@@ -224,8 +268,8 @@ PYEOF
 fi
 
 echo
-echo "==> Restarting the dev container (restore requires it)"
-compose restart bambuddy
+echo "==> Starting the backend"
+compose up -d bambuddy
 
 cat <<'NOTE'
 
