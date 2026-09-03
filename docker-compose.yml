@@ -13,7 +13,7 @@ services:
       - "${DEV_PORT:-8000}:8000"
       # Virtual-printer ports. Uncomment when a change actually touches the VP
       # path — on macOS they still only get you as far as the Colima VM, since
-      # SSDP discovery and the LAN binds (<LAN address>) need a real host
+      # SSDP discovery and the virtual printers' own LAN binds need a real host
       # network. On a Linux host, use `network_mode: host` instead of this whole
       # ports block, the way upstream's compose does.
       #- "3000:3000"                  # VP bind/detect
@@ -41,8 +41,8 @@ services:
       # one FTP passive mode advertises. Without them a VP hands the slicer the
       # container IP (172.x) and the upload has nowhere to go. Set to the host's
       # LAN address if the VP ports above get uncommented.
-      #VIRTUAL_PRINTER_ADVERTISE_ADDRESS: <LAN address>
-      #VIRTUAL_PRINTER_PASV_ADDRESS: <LAN address>
+      #VIRTUAL_PRINTER_ADVERTISE_ADDRESS: <host LAN address>
+      #VIRTUAL_PRINTER_PASV_ADDRESS: <host LAN address>
       # Sidecars are reachable by service name inside the compose network, on
       # their internal port 3000 — not on the host-side 3003/3001. Harmless
       # when the profiles are off: Bambuddy only dials these once "Use Slicer

@@ -11,7 +11,9 @@
 # before letting it run unattended.
 #
 # Environment:
-#   BAMBUDDY_PROD_URL   default <bambuddy host>
+#   BAMBUDDY_PROD_URL   the production instance to copy from (required; the
+#                       repo is public, so no host is hardcoded here — export it
+#                       in the shell profile)
 #   BAMBUDDY_API_KEY    API key on the production instance; needs the
 #                       settings:backup permission. Also read from the
 #                       bambuddy MCP server config in ~/.claude.json.
@@ -21,9 +23,14 @@
 
 set -euo pipefail
 
-PROD_URL="${BAMBUDDY_PROD_URL:-<bambuddy host>}"
+PROD_URL="${BAMBUDDY_PROD_URL:-}"
 DEV_URL="${BAMBUDDY_DEV_URL:-http://localhost:8000}"
 OUT_DIR="$(git rev-parse --show-toplevel)/dev-data/backups"
+
+if [ -z "$PROD_URL" ] && [ $# -eq 0 ]; then
+    echo "Set BAMBUDDY_PROD_URL to the production instance, or pass a ZIP to restore." >&2
+    exit 1
+fi
 
 DOWNLOAD_ONLY=false
 LOCAL_ZIP=""
