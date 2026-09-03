@@ -276,6 +276,29 @@ HX711 працює тільки через mmap `/dev/gpiomem`; kiosk-режим
 
 ---
 
+## Локальна розробка
+
+```bash
+docker compose -f docker-compose.dev.yml up -d          # bambuddy + OrcaSlicer сайдкар
+docker compose -f docker-compose.dev.yml --profile bambu up -d   # + BambuStudio
+cd frontend && npm run dev                              # фронт на хості, vite проксить /api
+scripts/dev-restore.sh                                  # залити бекап прода в локальну копію
+```
+
+Контейнер бере рантайм із `ghcr.io/grengojbo/bambuddy`, але монтує `backend/` з
+робочого дерева поверх коду в образі та запускає uvicorn з `--reload`. Дані —
+у `./dev-data` (ігнорується git).
+
+Обмеження, про які треба пам'ятати:
+
+- **Bridge mode, не host** — на macOS host-мережі немає. Вихід на принтери за
+  статичними IP працює (статус, камера, керування), а SSDP-виявлення й віртуальні
+  принтери — ні: їм потрібно біндити `<LAN address>` у LAN.
+- Після `dev-restore.sh` локальна копія — точний клон прода й **чіпляється до тих
+  самих реальних принтерів**. Що вимкнути (VP, розетки, автоматику) — вирішувати
+  в UI перед тим, як лишати її працювати.
+- Слайсер-сайдкари існують тільки під `linux/amd64`.
+
 ## Команди
 
 ```bash

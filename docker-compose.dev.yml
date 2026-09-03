@@ -1,0 +1,107 @@
+# Local development stack for this fork.
+#
+#   docker compose -f docker-compose.dev.yml up -d              # bambuddy + OrcaSlicer sidecar
+#   docker compose -f docker-compose.dev.yml --profile bambu up -d   # + BambuStudio sidecar
+#   docker compose -f docker-compose.dev.yml logs -f bambuddy
+#
+# The container brings the runtime (Python deps, ffmpeg, tailscale CLI) from
+# the fork's published image, but runs the *working tree's* backend/ mounted
+# over the image's copy, with uvicorn --reload. Edit a file, the backend
+# restarts. The frontend is not served from here during development — run
+# `cd frontend && npm run dev` on the host; vite proxies /api to :8000.
+#
+# `slicer-api/docker-compose.yml` is an upstream file and stays untouched;
+# the two sidecars are redeclared here so the whole dev stack is one command
+# and shares one network.
+#
+# Networking: this is bridge mode, not host mode — Docker Desktop and Colima
+# on macOS have no host networking. Outbound to the printers on the LAN works
+# (they are added by static IP), so live status, camera and control are fine.
+# What does not work in bridge mode is SSDP discovery and the virtual printers
+# (they need to bind <LAN address> on the LAN). Slice-and-send from a slicer
+# therefore stays a production-instance job.
+#
+# Data lives in ./dev-data (gitignored). Seed it from the production instance
+# with scripts/dev-restore.sh.
+
+services:
+  bambuddy:
+    image: ghcr.io/grengojbo/bambuddy:${BAMBUDDY_TAG:-latest}
+    container_name: bambuddy-dev
+    # Dev stack: never resurrect itself after a crash or a host reboot.
+    restart: "no"
+    ports:
+      - "${DEV_PORT:-8000}:8000"
+    volumes:
+      # The working tree's backend over the image's copy. Read-only: the app
+      # writes to /app/data, never to its own source, and this keeps a stray
+      # container-side write from landing in the git tree.
+      - ./backend:/app/backend:ro
+      - ./dev-data/data:/app/data
+      - ./dev-data/logs:/app/logs
+    environment:
+      TZ: ${TZ:-Europe/Kyiv}
+      # Match the host user so files under ./dev-data are yours: `id -u` / `id -g`.
+      PUID: ${PUID:-501}
+      PGID: ${PGID:-20}
+      PORT: "8000"
+      # Sidecars are reachable by service name inside the compose network,
+      # on their internal port 3000 — not on the host-side 3003/3001.
+      SLICER_API_URL: http://orca-slicer-api:3000
+      BAMBU_STUDIO_API_URL: http://bambu-studio-api:3000
+    # --reload needs an explicit reload-dir: the default watches the whole CWD,
+    # which here includes /app/data (thumbnails, timelapses, uploads) and would
+    # restart the backend every time a printer writes a file.
+    command:
+      - sh
+      - -c
+      - exec uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --loop asyncio --reload --reload-dir /app/backend
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  # Both sidecars are linux/amd64 only — on Apple Silicon they run under
+  # Rosetta/QEMU emulation and slicing is several times slower than on the
+  # production host. Fine for exercising the code path, not for benchmarking.
+  orca-slicer-api:
+    image: ghcr.io/maziggy/orca-slicer-api:${SIDECAR_TAG:-latest}
+    container_name: orca-slicer-api-dev
+    restart: "no"
+    ports:
+      - "${ORCA_API_PORT:-3003}:3000"
+    volumes:
+      - ./dev-data/orca:/app/data
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      MAX_MODEL_UPLOAD_MB: "${MAX_MODEL_UPLOAD_MB:-512}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  bambu-studio-api:
+    image: ghcr.io/maziggy/bambu-studio-api:${SIDECAR_TAG:-latest}
+    container_name: bambu-studio-api-dev
+    restart: "no"
+    ports:
+      - "${BAMBU_API_PORT:-3001}:3000"
+    volumes:
+      - ./dev-data/bambu:/app/data
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      MAX_MODEL_UPLOAD_MB: "${MAX_MODEL_UPLOAD_MB:-512}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    profiles:
+      - bambu

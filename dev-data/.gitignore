@@ -1,0 +1,3 @@
+# Local dev state: database, logs, backups, slicer caches. Never committed.
+*
+!.gitignore
