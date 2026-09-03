@@ -115,7 +115,7 @@ fi
 echo "==> Checking the dev instance at $DEV_URL"
 if ! curl -sSf -o /dev/null "$DEV_URL/health"; then
     echo "Dev instance is not answering. Start it first:" >&2
-    echo "  docker compose -f docker-compose.dev.yml up -d" >&2
+    echo "  docker compose up -d" >&2
     exit 1
 fi
 
@@ -140,7 +140,7 @@ cat /tmp/bambuddy-restore-response.json; echo
 
 echo
 echo "==> Restarting the dev container (restore requires it)"
-docker compose -f "$(git rev-parse --show-toplevel)/docker-compose.dev.yml" restart bambuddy
+docker compose -f "$(git rev-parse --show-toplevel)/docker-compose.yml" restart bambuddy
 
 cat <<'NOTE'
 

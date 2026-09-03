@@ -279,13 +279,9 @@ HX711 працює тільки через mmap `/dev/gpiomem`; kiosk-режим
 ## Локальна розробка
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d           # тільки bambuddy
-cd frontend && npm run dev                               # фронт на хості, vite проксить /api
-scripts/dev-restore.sh                                   # залити бекап прода в локальну копію
-
-# слайсер-сайдкари — за профілями, потрібні лише коли ввімкнено «Use Slicer API»
-docker compose -f docker-compose.dev.yml --profile slicer up -d   # + OrcaSlicer
-docker compose -f docker-compose.dev.yml --profile bambu up -d    # + BambuStudio
+docker compose up -d                    # локальний bambuddy з мого образу
+cd frontend && npm run dev              # фронт на хості, vite проксить /api
+scripts/dev-restore.sh                  # залити бекап прода в локальну копію
 ```
 
 Контейнер бере рантайм із `ghcr.io/grengojbo/bambuddy`, але монтує `backend/` з
@@ -324,5 +320,8 @@ cd frontend && npm ci && npm run build   # фронт
 - `GITHUB_REPO = "maziggy/bambuddy"` у `backend/app/core/config.py` навмисно не
   чіпаємо: вбудований апдейтер дивиться на upstream-релізи, і це дешевше, ніж
   конфлікт при кожному мержі.
-- `docker-compose.yml` теж апстрімний і вказує на upstream-образ; свій запуск —
-  через `docker-compose.fork.yml`.
+- `docker-compose.yml` — виняток із правила вище: він переписаний під локальну
+  розробку (мій образ, монтування `backend/`, `--reload`, дані в `./dev-data`).
+  При мержі апстрімних змін у ньому свідомо лишаємо свою версію.
+- Слайсер-сайдкари живуть окремо в апстрімному `slicer-api/docker-compose.yml`
+  і потрібні лише коли ввімкнено «Use Slicer API».
