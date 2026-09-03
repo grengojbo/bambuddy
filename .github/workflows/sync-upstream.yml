@@ -1,0 +1,54 @@
+name: Sync upstream
+
+# Keep the fork's mirror branches and tags in step with maziggy/bambuddy.
+#
+# `main` and `dev` are pure mirrors: nothing of mine is ever committed there, so
+# GitHub's merge-upstream API can always fast-forward them. My own work lives on
+# `master` (the default branch) and is merged from `main` by hand — pulling
+# somebody else's release into my tree unattended is how silent breakage starts.
+#
+# Note this workflow must live on the default branch for `schedule` to fire,
+# which is why it sits on `master` rather than on a mirror.
+
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Don't run in anybody else's fork of this fork.
+    if: github.repository_owner == 'grengojbo'
+    steps:
+      - name: Fast-forward mirror branches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          for branch in main dev; do
+            echo "::group::$branch"
+            # merge-upstream is a no-op when already in sync and refuses to run
+            # (rather than clobbering) when the branch has diverged — exactly the
+            # safety we want from a mirror.
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/merge-upstream" \
+              -f branch="$branch" || echo "::warning::merge-upstream failed for $branch"
+            echo "::endgroup::"
+          done
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Tags pushed with GITHUB_TOKEN cannot trigger other workflows, so
+      # mirroring upstream release tags here can never kick off a Docker build.
+      # (docker-ghcr.yml only listens for `v*-jbo.*` anyway.)
+      - name: Mirror upstream tags
+        run: |
+          set -euo pipefail
+          git remote add upstream https://github.com/maziggy/bambuddy.git
+          git fetch upstream --tags --quiet
+          git push origin --tags

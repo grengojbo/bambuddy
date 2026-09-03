@@ -1,0 +1,15 @@
+# Fork overlay: run the image built by this fork instead of upstream's.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.fork.yml up -d
+#
+# Everything else — volumes, ports, capabilities, environment — stays in
+# docker-compose.yml, which is an upstream file and is deliberately left
+# untouched so merges stay cheap.
+#
+# Do not pass --build with this overlay: the point is to consume the image
+# built by the Docker GHCR workflow, not to rebuild it on the target host
+# (which on a Raspberry Pi is exactly what we are avoiding).
+services:
+  bambuddy:
+    image: ghcr.io/grengojbo/bambuddy:latest
+    pull_policy: always

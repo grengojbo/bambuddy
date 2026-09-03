@@ -2,14 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master, main]
   pull_request:
-    branches: [main]
+    branches: [master, main]
   workflow_dispatch:
-    # Run on PRs targeting main, but skip for repo owner (runs local tests)
 
-# Skip CI for PRs authored by repo owner (they run tests locally)
-# Uses PR author instead of triggering actor so rebasing by owner doesn't skip CI
+# Fork note: upstream skips CI for PRs authored by the repo owner (they test
+# locally). Here the repo owner is me and every PR is mine, so that guard is
+# dropped — otherwise nothing would ever run.
 
 env:
   PYTHON_VERSION: '3.11'
@@ -32,7 +32,6 @@ jobs:
   backend-lint:
     name: Backend Lint
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.user.login != github.repository_owner
     steps:
       - uses: actions/checkout@v6
 
@@ -56,7 +55,6 @@ jobs:
   backend-security:
     name: Backend Security
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.user.login != github.repository_owner
     continue-on-error: true
     steps:
       - uses: actions/checkout@v6
@@ -92,7 +90,6 @@ jobs:
   backend-tests:
     name: Backend Tests (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.user.login != github.repository_owner
     needs: backend-lint
     strategy:
       # Don't cancel sibling shards if one fails — we want every shard's
@@ -161,7 +158,6 @@ jobs:
   frontend-lint:
     name: Frontend Lint
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.user.login != github.repository_owner
     steps:
       - uses: actions/checkout@v6
 
@@ -183,7 +179,6 @@ jobs:
   frontend-security:
     name: Frontend Security
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.user.login != github.repository_owner
     continue-on-error: true
     steps:
       - uses: actions/checkout@v6
@@ -261,7 +256,6 @@ jobs:
   frontend-typecheck:
     name: Frontend Type Check
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.user.login != github.repository_owner
     steps:
       - uses: actions/checkout@v6
 
@@ -283,7 +277,6 @@ jobs:
   frontend-tests:
     name: Frontend Tests
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.user.login != github.repository_owner
     needs: [frontend-lint, frontend-typecheck]
     steps:
       - uses: actions/checkout@v6
@@ -307,7 +300,6 @@ jobs:
   frontend-build:
     name: Frontend Build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.user.login != github.repository_owner
     needs: [frontend-tests]
     steps:
       - uses: actions/checkout@v6
@@ -341,7 +333,6 @@ jobs:
   docker-backend-tests:
     name: Docker Backend Tests (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.user.login != github.repository_owner
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -385,7 +376,6 @@ jobs:
   docker-test:
     name: Docker Build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.user.login != github.repository_owner
     timeout-minutes: 20
     needs: [backend-tests, frontend-build]
     steps:

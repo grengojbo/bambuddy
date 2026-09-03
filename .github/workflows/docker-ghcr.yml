@@ -1,0 +1,188 @@
+name: Docker GHCR
+
+# Build and publish the fork's container image to GitHub Container Registry.
+#
+# Only *my* release tags build: `v<version>-jbo.<n>` (e.g. v1.2.5.5-jbo.1).
+# Upstream tags mirrored into this fork (v1.2.5.5, v1.2.6b1-daily.20260830, ...)
+# do not match the trigger pattern, so syncing upstream never spends CI minutes
+# or overwrites an image. The `-daily.` guard below is a second line of defence
+# for the case where a daily prerelease is ever re-tagged with a -jbo suffix.
+#
+# amd64 and arm64 are built natively on separate runners and stitched into one
+# manifest list afterwards. arm64 is not optional: the image is consumed by
+# Home Assistant on a Raspberry Pi 5 CM5. Emulating it through QEMU would turn
+# a ~12 minute build into an hour.
+#
+# Docker Hub is deliberately not a target — GHCR only.
+
+on:
+  push:
+    tags:
+      - 'v*-jbo.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image version tag (without leading v), e.g. 1.2.5.5-jbo.1'
+        required: true
+        type: string
+      tag_latest:
+        description: "Also push ':latest'"
+        type: boolean
+        default: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+# Least privilege: read the tree, write packages. Nothing else.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    # Never build a daily prerelease, however it got tagged.
+    if: ${{ !contains(github.ref_name, '-daily.') }}
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag_latest: ${{ steps.v.outputs.tag_latest }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve version and latest flag
+        id: v
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION='${{ inputs.version }}'
+            TAG_LATEST='${{ inputs.tag_latest }}'
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+            # Only stable upstream bases get ':latest'. Betas end in b<N>
+            # before the -jbo suffix (1.2.6b1-jbo.2) — same rule as
+            # docker-publish.sh uses for upstream releases.
+            BASE="${VERSION%%-jbo.*}"
+            if [[ "$BASE" =~ b[0-9]*$ ]]; then TAG_LATEST=false; else TAG_LATEST=true; fi
+          fi
+
+          # The image reports APP_VERSION at runtime; a tag that disagrees with
+          # the source would publish an image lying about what it is.
+          BASE="${VERSION%%-jbo.*}"
+          APP_VERSION="$(sed -n 's/^APP_VERSION = "\(.*\)"$/\1/p' backend/app/core/config.py)"
+          if [ "$BASE" != "$APP_VERSION" ]; then
+            echo "::error::Tag base '$BASE' != APP_VERSION '$APP_VERSION' in backend/app/core/config.py"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag_latest=$TAG_LATEST" >> "$GITHUB_OUTPUT"
+          echo "Building $VERSION (latest=$TAG_LATEST)"
+
+  build:
+    name: Build ${{ matrix.platform }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          labels: |
+            org.opencontainers.image.title=Bambuddy
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+
+      # Push by digest only; the `merge` job assembles the tags. Provenance and
+      # SBOM attestations are off because they add extra manifest entries that
+      # imagetools would then have to reason about — upstream's publish script
+      # disables them for the same reason.
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,scope=${{ matrix.arch }},mode=max
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest='${{ steps.build.outputs.digest }}'
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Publish manifest
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          path: /tmp/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create manifest list
+        run: |
+          set -euo pipefail
+          TAGS="-t ${IMAGE}:${{ needs.prepare.outputs.version }}"
+          if [ "${{ needs.prepare.outputs.tag_latest }}" = "true" ]; then
+            TAGS="$TAGS -t ${IMAGE}:latest"
+          fi
+          cd /tmp/digests
+          # One source ref per digest file; word splitting is intentional.
+          docker buildx imagetools create $TAGS \
+            $(printf "${IMAGE}@sha256:%s " *)
+
+      - name: Inspect
+        run: docker buildx imagetools inspect "${IMAGE}:${{ needs.prepare.outputs.version }}"
