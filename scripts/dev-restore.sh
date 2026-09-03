@@ -175,7 +175,13 @@ cat /tmp/bambuddy-restore-response.json; echo
 
 echo
 echo "==> Restarting the dev container (restore requires it)"
-docker compose -f "$(git rev-parse --show-toplevel)/docker-compose.yml" restart bambuddy
+# Compose ships both as a `docker compose` plugin and as a standalone binary,
+# and a machine can have either. Use whichever answers.
+if docker compose version >/dev/null 2>&1; then
+    docker compose restart bambuddy
+else
+    docker-compose restart bambuddy
+fi
 
 cat <<'NOTE'
 
