@@ -4,6 +4,7 @@
 #   scripts/dev-restore.sh                     # pull a fresh backup, restore locally
 #   scripts/dev-restore.sh backup.zip          # restore a ZIP you already have
 #   scripts/dev-restore.sh --download-only     # just fetch the ZIP
+#   scripts/dev-restore.sh --yes               # no confirmation prompt
 #
 # The backup is restored verbatim — virtual printers, smart plugs and their
 # settings come across exactly as production has them. Two Bambuddy instances
@@ -12,8 +13,8 @@
 #
 # Environment:
 #   BAMBUDDY_PROD_URL   the production instance to copy from (required; the
-#                       repo is public, so no host is hardcoded here — export it
-#                       in the shell profile)
+#                       repo is public, so no host is hardcoded here). Read from
+#                       .env, same as the compose stack, or from the environment.
 #   BAMBUDDY_API_KEY    API key on the production instance; needs the
 #                       settings:backup permission. Also read from the
 #                       bambuddy MCP server config in ~/.claude.json.
@@ -22,6 +23,24 @@
 #                       (it will be, once production data is restored)
 
 set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+# .env is where the compose stack keeps its settings, so read the handful this
+# script needs from there too rather than making the shell profile carry a
+# second copy. Only known keys are taken, and only when not already exported.
+if [ -f .env ]; then
+    for key in BAMBUDDY_PROD_URL BAMBUDDY_API_KEY BAMBUDDY_DEV_URL BAMBUDDY_DEV_KEY; do
+        eval "current=\${$key:-}"
+        if [ -z "$current" ]; then
+            value=$(sed -n "s/^${key}=//p" .env | head -1)
+            # Strip optional surrounding quotes, the way compose does.
+            value=${value%\"}; value=${value#\"}
+            value=${value%\'}; value=${value#\'}
+            [ -n "$value" ] && export "$key=$value"
+        fi
+    done
+fi
 
 PROD_URL="${BAMBUDDY_PROD_URL:-}"
 DEV_URL="${BAMBUDDY_DEV_URL:-http://localhost:8000}"
@@ -33,10 +52,12 @@ if [ -z "$PROD_URL" ] && [ $# -eq 0 ]; then
 fi
 
 DOWNLOAD_ONLY=false
+ASSUME_YES=false
 LOCAL_ZIP=""
 for arg in "$@"; do
     case "$arg" in
         --download-only) DOWNLOAD_ONLY=true ;;
+        -y|--yes) ASSUME_YES=true ;;
         -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
         *) LOCAL_ZIP="$arg" ;;
     esac
@@ -128,9 +149,16 @@ fi
 
 echo "==> Restoring into the dev instance"
 echo "    This replaces its database and data directories."
-printf '    Continue? [y/N] '
-read -r reply
-case "$reply" in y|Y|yes) ;; *) echo "Aborted."; exit 1 ;; esac
+if [ "$ASSUME_YES" = true ]; then
+    echo "    --yes given, going ahead."
+elif [ -t 0 ]; then
+    printf '    Continue? [y/N] '
+    read -r reply
+    case "$reply" in y|Y|yes) ;; *) echo "Aborted."; exit 1 ;; esac
+else
+    echo "Not a terminal and --yes was not given; refusing to overwrite." >&2
+    exit 1
+fi
 
 code=$(curl -sS -o /tmp/bambuddy-restore-response.json -w '%{http_code}' \
     -X POST \
