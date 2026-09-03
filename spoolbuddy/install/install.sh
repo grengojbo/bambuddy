@@ -63,6 +63,7 @@ API_KEY=""
 BAMBUDDY_PORT="8000"
 NFC_DRIVER="pn5180"       # or "mfrc522"
 SCALE_DRIVER="nau7802"    # or "hx711"
+SKIP_KIOSK="false"
 NON_INTERACTIVE="false"
 REBOOT_NEEDED="false"
 KIOSK_USER=""            # auto-detected from $SUDO_USER
@@ -206,6 +207,7 @@ show_help() {
     echo "  --port PORT          Bambuddy port (full mode only, default: 8000)"
     echo "  --nfc-driver NAME    NFC reader: pn5180 (default) or mfrc522"
     echo "  --scale-driver NAME  Load cell ADC: nau7802 (default) or hx711"
+    echo "  --no-kiosk           Skip labwc/Chromium kiosk setup (headless daemon only)"
     echo "  --ssh-pubkey KEY     Bambuddy SSH public key for remote updates"
     echo "  --yes, -y            Non-interactive mode, accept defaults"
     echo "  --help, -h           Show this help message"
@@ -1432,6 +1434,10 @@ parse_args() {
                 esac
                 shift 2
                 ;;
+            --no-kiosk)
+                SKIP_KIOSK="true"
+                shift
+                ;;
             --ssh-pubkey)
                 SSH_PUBKEY="$2"
                 shift 2
@@ -1662,7 +1668,11 @@ main() {
     echo ""
 
     # ── Step 3b: Kiosk setup (labwc + Chromium + squeekboard + Plymouth) ──
-    setup_kiosk
+    if [[ "$SKIP_KIOSK" == "true" ]]; then
+        info "Skipping kiosk setup (--no-kiosk): headless daemon only"
+    else
+        setup_kiosk
+    fi
     echo ""
 
     # ── Step 4: SpoolBuddy setup ──────────────────────────────────────────
@@ -1670,7 +1680,7 @@ main() {
     setup_spoolbuddy_venv
     create_spoolbuddy_env
     # Kiosk env access: only needed if actual kiosk hardware is available
-    if [[ -f /boot/firmware/config.txt ]] || [[ -f /boot/config.txt ]]; then
+    if [[ "$SKIP_KIOSK" != "true" ]] && { [[ -f /boot/firmware/config.txt ]] || [[ -f /boot/config.txt ]]; }; then
         ensure_kiosk_env_access
     fi
     setup_ssh_key
