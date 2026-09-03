@@ -7,7 +7,9 @@
 #   scripts/dev-restore.sh --yes               # no confirmation prompt
 #   scripts/dev-restore.sh --keep-settings     # leave production URLs as they are
 #   scripts/dev-restore.sh --no-auth           # drop the login on the local copy
-#   scripts/dev-restore.sh --no-vp             # stop the virtual printers here
+#   scripts/dev-restore.sh --keep-vp           # leave the virtual printers enabled
+#                                              # (they are disabled by default —
+#                                              #  they cannot bind here anyway)
 #
 # The backup is restored verbatim — virtual printers, smart plugs and their
 # settings come across exactly as production has them (external_url excepted,
@@ -64,7 +66,10 @@ DOWNLOAD_ONLY=false
 ASSUME_YES=false
 LOCALIZE=true
 DISABLE_AUTH=false
-DISABLE_VPS=false
+# On by default: the virtual printers cannot work in a dev copy at all (their
+# addresses are alias IPs on the production host), so leaving them enabled only
+# buys a wall of bind errors on every start. --keep-vp opts out.
+DISABLE_VPS=true
 LOCAL_ZIP=""
 for arg in "$@"; do
     case "$arg" in
@@ -73,7 +78,8 @@ for arg in "$@"; do
         --keep-settings) LOCALIZE=false ;;
         --no-auth) DISABLE_AUTH=true ;;
         --no-vp) DISABLE_VPS=true ;;
-        -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+        --keep-vp) DISABLE_VPS=false ;;
+        -h|--help) sed -n '2,12p' "$0" | cut -c3-; exit 0 ;;
         *) LOCAL_ZIP="$arg" ;;
     esac
 done
@@ -290,10 +296,10 @@ print("  auth_enabled -> false (local copy only)")
 PYEOF
 fi
 
-# The virtual printers bind LAN addresses that, in this setup, are alias IPs on
-# the production host — same MAC as the Home Assistant box. A second instance
-# cannot have them, so in the dev copy every VP fails to bind on every start and
-# buries the interesting log lines under a wall of errors.
+# Default behaviour. The virtual printers bind LAN addresses that, in this
+# setup, are alias IPs on the production host — .2/.3/.4 and the Home Assistant
+# box answer with one MAC. A second instance cannot have them, so every dev
+# start otherwise fails to bind each VP and buries the interesting log lines.
 if [ "$DISABLE_VPS" = true ]; then
     echo
     echo "==> Disabling the virtual printers on the local copy"
