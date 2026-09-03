@@ -128,9 +128,17 @@
 @goal shell
 @depends_on docker_up
 @use_lib compose
-@doc 'Shell inside a container: SERVICE=frontend ./makesure shell (default bambuddy)'
-  svc=${SERVICE:-bambuddy}
-  # The backend image has bash; node:22-slim only has sh.
+@doc 'Shell in a container: ./makesure shell (backend), SERVICE=frontend|ts ./makesure shell'
+  # The compose service is called bambuddy, but "backend" is what it is next to
+  # the frontend, so both names work.
+  case "${SERVICE:-backend}" in
+    backend|bambuddy) svc=bambuddy ;;
+    front|frontend)   svc=frontend ;;
+    ts|tailscale)     svc=tailscale ;;
+    *)                svc=$SERVICE ;;
+  esac
+
+  # The backend image has bash; node:22-slim and the tailscale image only have sh.
   dc exec "$svc" sh -c 'command -v bash >/dev/null && exec bash || exec sh'
 
 @goal ps
