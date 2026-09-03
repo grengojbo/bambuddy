@@ -7,6 +7,7 @@
 #   scripts/dev-restore.sh --yes               # no confirmation prompt
 #   scripts/dev-restore.sh --keep-settings     # leave production URLs as they are
 #   scripts/dev-restore.sh --no-auth           # drop the login on the local copy
+#   scripts/dev-restore.sh --no-vp             # stop the virtual printers here
 #
 # The backup is restored verbatim — virtual printers, smart plugs and their
 # settings come across exactly as production has them (external_url excepted,
@@ -63,6 +64,7 @@ DOWNLOAD_ONLY=false
 ASSUME_YES=false
 LOCALIZE=true
 DISABLE_AUTH=false
+DISABLE_VPS=false
 LOCAL_ZIP=""
 for arg in "$@"; do
     case "$arg" in
@@ -70,6 +72,7 @@ for arg in "$@"; do
         -y|--yes) ASSUME_YES=true ;;
         --keep-settings) LOCALIZE=false ;;
         --no-auth) DISABLE_AUTH=true ;;
+        --no-vp) DISABLE_VPS=true ;;
         -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
         *) LOCAL_ZIP="$arg" ;;
     esac
@@ -284,6 +287,27 @@ db = sqlite3.connect(sys.argv[1])
 db.execute("update settings set value='false' where key='auth_enabled'")
 db.commit()
 print("  auth_enabled -> false (local copy only)")
+PYEOF
+fi
+
+# The virtual printers bind LAN addresses that, in this setup, are alias IPs on
+# the production host — same MAC as the Home Assistant box. A second instance
+# cannot have them, so in the dev copy every VP fails to bind on every start and
+# buries the interesting log lines under a wall of errors.
+if [ "$DISABLE_VPS" = true ]; then
+    echo
+    echo "==> Disabling the virtual printers on the local copy"
+    python3 - "$DATA_DIR/bambuddy.db" <<'PYEOF'
+import sqlite3, sys
+
+db = sqlite3.connect(sys.argv[1])
+rows = db.execute("select name from virtual_printers where enabled=1").fetchall()
+db.execute("update virtual_printers set enabled=0")
+db.commit()
+for (name,) in rows:
+    print(f"  disabled: {name}")
+if not rows:
+    print("  none were enabled")
 PYEOF
 fi
 
