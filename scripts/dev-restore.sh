@@ -5,6 +5,7 @@
 #   scripts/dev-restore.sh backup.zip          # restore a ZIP you already have
 #   scripts/dev-restore.sh --download-only     # just fetch the ZIP
 #   scripts/dev-restore.sh --yes               # no confirmation prompt
+#   scripts/dev-restore.sh --keep-settings     # leave production URLs as they are
 #
 # The backup is restored verbatim — virtual printers, smart plugs and their
 # settings come across exactly as production has them. Two Bambuddy instances
@@ -22,6 +23,8 @@
 #   BAMBUDDY_DEV_URL    default http://localhost:8000
 #   BAMBUDDY_DEV_KEY    only needed if auth is enabled in the local copy
 #                       (it will be, once production data is restored)
+#   TS_HOSTNAME         when set, the restored copy's external_url is pointed
+#                       at https://$TS_HOSTNAME instead of localhost
 
 set -euo pipefail
 
@@ -31,7 +34,7 @@ cd "$(git rev-parse --show-toplevel)"
 # script needs from there too rather than making the shell profile carry a
 # second copy. Only known keys are taken, and only when not already exported.
 if [ -f .env ]; then
-    for key in BAMBUDDY_PROD_URL BAMBUDDY_API_KEY BAMBUDDY_DEV_URL BAMBUDDY_DEV_KEY; do
+    for key in BAMBUDDY_PROD_URL BAMBUDDY_API_KEY BAMBUDDY_DEV_URL BAMBUDDY_DEV_KEY TS_HOSTNAME VITE_PORT; do
         eval "current=\${$key:-}"
         if [ -z "$current" ]; then
             value=$(sed -n "s/^${key}=//p" .env | head -1)
@@ -54,11 +57,13 @@ fi
 
 DOWNLOAD_ONLY=false
 ASSUME_YES=false
+LOCALIZE=true
 LOCAL_ZIP=""
 for arg in "$@"; do
     case "$arg" in
         --download-only) DOWNLOAD_ONLY=true ;;
         -y|--yes) ASSUME_YES=true ;;
+        --keep-settings) LOCALIZE=false ;;
         -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
         *) LOCAL_ZIP="$arg" ;;
     esac
@@ -99,6 +104,16 @@ PY
 )"
     [ -n "${BAMBUDDY_API_KEY:-}" ] && echo "Using API key from ~/.claude.json"
 fi
+
+# Compose ships both as a `docker compose` plugin and as a standalone binary,
+# and a machine can have either. Use whichever answers.
+compose() {
+    if docker compose version >/dev/null 2>&1; then
+        docker compose "$@"
+    else
+        docker-compose "$@"
+    fi
+}
 
 auth_header() {
     if [ -n "${1:-}" ]; then printf 'X-API-Key: %s' "$1"; else printf 'X-Dummy: none'; fi
@@ -175,15 +190,37 @@ if [ "$code" != "200" ]; then
 fi
 cat /tmp/bambuddy-restore-response.json; echo
 
+# The backup carries the production instance's own addresses. external_url is
+# the one that matters: it is what notification images and label QR codes are
+# built from, so left alone the dev copy hands out links into production.
+# Written straight to SQLite because API keys are denied SETTINGS_UPDATE, and
+# before the restart below so the app picks it up on its way back.
+if [ "$LOCALIZE" = true ]; then
+    new_url="${TS_HOSTNAME:+https://$TS_HOSTNAME}"
+    : "${new_url:=http://localhost:${VITE_PORT:-5173}}"
+    echo
+    echo "==> Pointing external_url at this instance: $new_url"
+    compose exec -T bambuddy python - "$new_url" <<'PYEOF' || echo "  (skipped — could not reach the container)"
+import sqlite3, sys
+
+url = sys.argv[1]
+db = sqlite3.connect("/app/data/bambuddy.db")
+old = db.execute("select value from settings where key='external_url'").fetchone()
+db.execute("update settings set value=? where key='external_url'", (url,))
+db.commit()
+print(f"  external_url: {old[0] if old else '(unset)'} -> {url}")
+
+# Not touched, but worth knowing about: these keep pointing at production.
+for key in ("ha_url", "orcaslicer_api_url", "bambu_studio_api_url"):
+    row = db.execute("select value from settings where key=?", (key,)).fetchone()
+    if row and row[0]:
+        print(f"  left as-is: {key} = {row[0]}")
+PYEOF
+fi
+
 echo
 echo "==> Restarting the dev container (restore requires it)"
-# Compose ships both as a `docker compose` plugin and as a standalone binary,
-# and a machine can have either. Use whichever answers.
-if docker compose version >/dev/null 2>&1; then
-    docker compose restart bambuddy
-else
-    docker-compose restart bambuddy
-fi
+compose restart bambuddy
 
 cat <<'NOTE'
 
