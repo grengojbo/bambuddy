@@ -244,6 +244,24 @@ HX711 працює тільки через mmap `/dev/gpiomem`; kiosk-режим
 `list_virtual_printers`, `get_virtual_printer`, `diagnose_virtual_printer`,
 `get_ca_certificate`, `get_tailscale_status`, `get_virtual_printer_models`.
 
+### Нотатки — Obsidian
+
+Робочі нотатки по Bambuddy живуть в Obsidian, не в репозиторії:
+
+```
+~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Bamuddy/
+  00-Bambuddy.md          доступи, посилання, помилки принтера, знахідки
+  10-Розробка форку.md    сценарій розробки: гілки, dev-стек, реліз образу
+```
+
+Формат — Obsidian: YAML-frontmatter із тегами, `[[wikilink]]` між нотатками,
+callout-и (`> [!warning]`), українською. Нумерований префікс у назві задає
+порядок; нова нотатка лінкується з `00-Bambuddy` в обидва боки.
+
+**Там лежать паролі й ключі** — нічого звідти не переносити в репозиторій і не
+цитувати в комітах чи PR. У зворотний бік: якщо процес усталився, його місце в
+цьому файлі, а нотатка лишається для чернеток і залізячних спостережень.
+
 ---
 
 ## Безпека та обережність
