@@ -292,7 +292,8 @@ callout-и (`> [!warning]`), українською. Нумерований пр
 | `install/` | інсталятори для хостів, включно з Windows |
 | `.github/workflows/` | CI upstream + мої `docker-ghcr.yml` і `sync-upstream.yml` |
 | `scripts/sync-upstream.sh` | синк дзеркал і тегів |
-| `Makesurefile` + `makesure` | цілі розробки; раннер вендорений, 0.9.18 |
+| `Makesurefile` + `makesure` | цілі розробки; раннер вендорений |
+| `dev/_makesure` | zsh-доповнення цілей; ставиться `./makesure completion` |
 | `dev/tailscale-serve.json` | конфіг `tailscale serve` для dev-сайдкара |
 
 ---

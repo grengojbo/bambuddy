@@ -1,0 +1,64 @@
+#compdef makesure
+#
+# zsh completion for makesure (https://github.com/xonixx/makesure).
+#
+# Goals are read from `makesure -l` in the current directory, so this works for
+# any project with a Makesurefile, not just this one. Install with:
+#
+#   ./makesure completion
+#
+# which symlinks it into a directory already on your fpath.
+
+_makesure() {
+    local -a goals opts
+    local buildfile=Makesurefile line name desc
+
+    opts=(
+        '(-f --file)'{-f,--file}'[buildfile to use]:buildfile:_files'
+        '(-l --list)'{-l,--list}'[list non-private goals]'
+        '(-la --list-all)'{-la,--list-all}'[list all goals]'
+        '(-d --resolved)'{-d,--resolved}'[show resolved dependencies]'
+        '(-D --define)'{-D,--define}'[override a @define]:var=val:'
+        '(-s --silent)'{-s,--silent}'[only goal output]'
+        '(-t --timing)'{-t,--timing}'[show execution times]'
+        '(-x --tracing)'{-x,--tracing}'[set -x inside goals]'
+        '(-v --version)'{-v,--version}'[print version]'
+        '(-h --help)'{-h,--help}'[print help]'
+        '(-U --selfupdate)'{-U,--selfupdate}'[update makesure itself]'
+    )
+
+    # A -f earlier on the line changes which file the goals come from.
+    if (( ${words[(I)-f]} || ${words[(I)--file]} )); then
+        local i=${words[(I)-f]}
+        (( i )) || i=${words[(I)--file]}
+        [[ -n ${words[i+1]} ]] && buildfile=${words[i+1]}
+    fi
+
+    # Completing a bare `makesure` on a machine where it is not on PATH still
+    # has a vendored ./makesure to ask.
+    local runner=${words[1]}
+    [[ -x $runner ]] || (( $+commands[$runner] )) || runner=./makesure
+
+    if [[ -f $buildfile && ( -x $runner || $+commands[$runner] ) ]]; then
+        # `makesure -l` prints "  name : description"; keep both so the
+        # description shows up next to the goal.
+        goals=( ${(f)"$(
+            $runner -f $buildfile -l 2>/dev/null | awk '
+                NR > 1 && $1 != "" {
+                    name = $1
+                    idx = index($0, ": ")
+                    desc = idx ? substr($0, idx + 2) : ""
+                    gsub(/:/, "\\:", name)
+                    print name ":" desc
+                }'
+        )"} )
+    fi
+
+    _arguments -s $opts '*:goal:->goal'
+
+    case $state in
+        goal) _describe -t goals 'goal' goals ;;
+    esac
+}
+
+_makesure "$@"

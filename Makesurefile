@@ -218,6 +218,34 @@
 @doc 'The same, then merge main into master'
   scripts/sync-upstream.sh --merge
 
+@goal completion
+@doc 'Install the zsh completion (symlink into an fpath directory)'
+  src=$PWD/dev/_makesure
+
+  # Pick a directory zsh already searches, so no .zshrc edit is needed.
+  # Homebrew's site-functions is the usual answer, but on this machine only the
+  # Intel-era /usr/local copy is on fpath, hence the ordering below.
+  dest=""
+  for dir in "$HOME/.oh-my-zsh/completions" "$HOME/.zsh/completions" /opt/homebrew/share/zsh/site-functions; do
+    if [ -d "$dir" ] && zsh -ic 'print -l $fpath' 2>/dev/null | grep -qx "$dir"; then
+      dest=$dir
+      break
+    fi
+  done
+
+  if [ -z "$dest" ]; then
+    echo "No writable fpath directory found. Add one to ~/.zshrc, e.g.:" >&2
+    echo "  fpath=(~/.zsh/completions \$fpath)" >&2
+    echo "then re-run this goal." >&2
+    exit 1
+  fi
+
+  ln -sf "$src" "$dest/_makesure"
+  echo "Linked $dest/_makesure -> $src"
+  echo
+  echo "Start a new shell, or reload the cache in this one:"
+  echo "  rm -f ~/.zcompdump && exec zsh"
+
 # --------------------------------------------------------------------- release
 
 @goal release
