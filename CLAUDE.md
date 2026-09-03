@@ -292,16 +292,40 @@ callout-и (`> [!warning]`), українською. Нумерований пр
 | `install/` | інсталятори для хостів, включно з Windows |
 | `.github/workflows/` | CI upstream + мої `docker-ghcr.yml` і `sync-upstream.yml` |
 | `scripts/sync-upstream.sh` | синк дзеркал і тегів |
+| `Makesurefile` + `makesure` | цілі розробки; раннер вендорений, 0.9.18 |
+| `dev/tailscale-serve.json` | конфіг `tailscale serve` для dev-сайдкара |
 
 ---
 
 ## Локальна розробка
 
+Усе через `makesure` (вендорений раннер у корені, `./makesure -l` — список цілей):
+
 ```bash
-docker compose up -d                    # локальний bambuddy з мого образу
-cd frontend && npm run dev              # фронт на хості, vite проксить /api
-scripts/dev-restore.sh                  # залити бекап прода в локальну копію
+./makesure up          # бекенд + фронт у контейнерах → :8000 і :5173
+./makesure ts          # те саме, ще й опубліковано в tailnet як bambuddy-dev
+./makesure down        # зупинити все, разом із профілями
+./makesure logs        # хвіст бекенду; logs-frontend — vite
+./makesure restore     # залити бекап прода в локальну копію
+./makesure check       # ruff + тести, як у CI
+VERSION=1.2.5.5-jbo.2 ./makesure release
 ```
+
+Обидва сервіси — контейнери з бін-монтуванням робочого дерева: бекенд бере
+рантайм із мого образу й піднімає uvicorn з `--reload`, фронт — `node:22` з
+`vite`. Перебудовувати образ, щоб побачити зміну, не треба.
+
+Фронт запускається з `frontend/vite.config.dev.ts` (наш файл, апстрімний
+`vite.config.ts` не чіпаємо): він перенаправляє проксі `/api` на сервіс
+`bambuddy`, вмикає polling для вотчера (bind-mount на macOS не віддає
+inotify-події) і, коли задано `TS_HOSTNAME`, дозволяє цей Host і переводить HMR
+на `wss://…:443`.
+
+`./makesure ts` піднімає сайдкар `tailscale/tailscale` з hostname `bambuddy-dev`
+і `tailscale serve` на фронт — UI відкривається як
+`https://bambuddy-dev.<tailnet>.ts.net` із справжнім сертифікатом, без
+прокидання портів. Потрібні `TS_AUTHKEY` і `TS_HOSTNAME` у `.env` (він у
+`.gitignore`; шаблон — у `.env.example`).
 
 Контейнер бере рантайм із `ghcr.io/grengojbo/bambuddy`, але монтує `backend/` з
 робочого дерева поверх коду в образі та запускає uvicorn з `--reload`. Дані —
@@ -346,5 +370,6 @@ cd frontend && npm ci && npm run build   # фронт
   `.gitattributes`), тож наша версія лишається автоматично. Зворотний бік —
   корисні апстрімні правки цього файлу теж мовчки відкидаються, тому скрипт
   друкує список таких комітів для ручного перенесення.
-- Слайсер-сайдкари живуть окремо в апстрімному `slicer-api/docker-compose.yml`
-  і потрібні лише коли ввімкнено «Use Slicer API».
+- Слайсер-сайдкари в нашому compose не заведені: вони потрібні лише коли
+  ввімкнено «Use Slicer API», існують тільки під `linux/amd64` і живуть в
+  апстрімному `slicer-api/docker-compose.yml`, який ми не чіпаємо.

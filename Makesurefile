@@ -1,0 +1,165 @@
+# vim: syntax=bash
+#
+# Dev workflow for this fork, run with the vendored `makesure` (0.9.18):
+#
+#   ./makesure -l          list goals
+#   ./makesure up          start backend + frontend
+#   ./makesure ts          the same, published on the tailnet
+#   ./makesure down        stop everything
+#
+# Every goal is a thin wrapper over one command that is fine to run by hand;
+# the point is not to hide docker compose, it is to stop retyping it.
+
+@options timing
+
+@define COMPOSE='docker compose'
+@define DEV_PORT='8000'
+@define VITE_PORT='5173'
+@define TS_HOST='bambuddy-dev'
+
+# ---------------------------------------------------------------- preconditions
+
+@goal docker_up @private
+@doc 'Fail early with a useful message when the Docker VM is not running'
+  if ! docker info >/dev/null 2>&1; then
+    echo "Docker is not reachable. Start the VM first:" >&2
+    echo "  colima start --profile arm --arch aarch64 --cpu 4 --memory 6" >&2
+    echo "  docker context use colima-arm" >&2
+    exit 1
+  fi
+
+@goal tailnet_configured @private
+@doc 'The tailnet profile needs an auth key and the full node name'
+  if [[ -z "${TS_AUTHKEY:-}" ]] && ! grep -qs '^TS_AUTHKEY=' .env; then
+    echo "TS_AUTHKEY is not set." >&2
+    echo "Create a reusable auth key at https://login.tailscale.com/admin/settings/keys" >&2
+    echo "and put it in .env as TS_AUTHKEY=tskey-auth-..." >&2
+    exit 1
+  fi
+
+  # vite rejects a Host header it was not told about, so it needs the full
+  # name. It stays in .env rather than here: the repo is public and the
+  # tailnet name is not something to publish.
+  if [[ -z "${TS_HOSTNAME:-}" ]] && ! grep -qs '^TS_HOSTNAME=' .env; then
+    echo "TS_HOSTNAME is not set — vite would answer the tailnet request with" >&2
+    echo "\"Blocked request. This host is not allowed\"." >&2
+    echo "Add to .env:  TS_HOSTNAME=$TS_HOST.<your-tailnet>.ts.net" >&2
+    exit 1
+  fi
+
+# ------------------------------------------------------------------------- dev
+
+@goal up
+@depends_on docker_up
+@doc 'Start the dev stack (backend + frontend) on localhost'
+  $COMPOSE up -d
+  echo
+  echo "  UI       http://localhost:$VITE_PORT"
+  echo "  API      http://localhost:$DEV_PORT"
+  echo
+  echo "First start installs node_modules — give the frontend a minute:"
+  echo "  ./makesure logs-frontend"
+
+@goal ts
+@depends_on docker_up
+@depends_on tailnet_configured
+@doc 'Start the dev stack and publish it on the tailnet as bambuddy-dev'
+  $COMPOSE --profile ts up -d
+  echo
+  echo "  UI       https://$TS_HOST.<tailnet>.ts.net"
+  echo "  local    http://localhost:$VITE_PORT"
+  echo
+  echo "The exact name is in the sidecar's first log lines:"
+  echo "  $COMPOSE logs tailscale | head"
+
+@goal down
+@doc 'Stop the dev stack, tailnet sidecar included'
+  $COMPOSE --profile ts down
+
+@goal restart
+@depends_on docker_up
+@doc 'Restart the backend container (needed after a restore)'
+  $COMPOSE restart bambuddy
+
+@goal logs
+@doc 'Follow the backend log'
+  $COMPOSE logs -f bambuddy
+
+@goal logs-frontend
+@doc 'Follow the vite log'
+  $COMPOSE logs -f frontend
+
+@goal ps
+@doc 'What is running'
+  $COMPOSE --profile ts ps
+
+# ------------------------------------------------------------------------ data
+
+@goal restore
+@depends_on docker_up
+@doc 'Copy the production instance into the local one (asks before writing)'
+  scripts/dev-restore.sh
+
+@goal pull
+@depends_on docker_up
+@doc 'Pull a newer fork image and recreate the backend'
+  $COMPOSE pull bambuddy
+  $COMPOSE up -d bambuddy
+
+# --------------------------------------------------------------------- quality
+
+@goal lint
+@doc 'Ruff, the same checks CI runs'
+  ruff check backend/
+  ruff format --check backend/
+
+@goal test
+@doc 'Backend tests'
+  cd backend && python -m pytest tests/
+
+@goal test-spoolbuddy
+@doc 'SpoolBuddy driver tests'
+  cd spoolbuddy && python -m pytest tests/
+
+@goal check
+@depends_on lint
+@depends_on test
+@doc 'Everything that must pass before a commit'
+  echo "OK"
+
+# -------------------------------------------------------------------- upstream
+
+@goal sync
+@doc 'Fast-forward the main/dev mirrors and mirror upstream tags'
+  scripts/sync-upstream.sh
+
+@goal sync-merge
+@doc 'The same, then merge main into master'
+  scripts/sync-upstream.sh --merge
+
+# --------------------------------------------------------------------- release
+
+@goal release
+@doc 'Tag and push a release, building the image: VERSION=1.2.5.5-jbo.2 ./makesure release'
+  if [[ -z "${VERSION:-}" ]]; then
+    echo 'Set VERSION, e.g. VERSION=1.2.5.5-jbo.2 ./makesure release' >&2
+    exit 1
+  fi
+
+  app_version=$(sed -n 's/^APP_VERSION = "\(.*\)"$/\1/p' backend/app/core/config.py)
+  base=${VERSION%%-jbo.*}
+  if [[ "$base" != "$app_version" ]]; then
+    echo "VERSION base '$base' does not match APP_VERSION '$app_version' in backend/app/core/config.py." >&2
+    echo "The build workflow rejects this, so fix one of them first." >&2
+    exit 1
+  fi
+
+  if [[ -n "$(git status --porcelain)" ]]; then
+    echo "Working tree is dirty — commit first." >&2
+    exit 1
+  fi
+
+  git tag "v${VERSION}"
+  git push origin master "v${VERSION}"
+  echo
+  echo "Watch the build:  gh run watch -R grengojbo/bambuddy \$(gh run list -R grengojbo/bambuddy --workflow=docker-ghcr.yml --limit 1 --json databaseId --jq '.[0].databaseId')"

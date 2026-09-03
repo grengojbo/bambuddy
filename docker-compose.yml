@@ -1,3 +1,26 @@
+# Local development stack for this fork.
+#
+#   makesure up        — bambuddy + frontend
+#   makesure ts        — the same, published on the tailnet as bambuddy-dev
+#   makesure down
+#
+# Everything here is driven by the Makesurefile; the raw compose commands are
+# `docker compose up -d` and `docker compose --profile ts up -d`.
+#
+# bambuddy runs the fork's published image for the runtime (Python deps, ffmpeg)
+# with the working tree's backend/ mounted over the image's copy and uvicorn
+# --reload on top: edit a file, the backend restarts. frontend is a plain node
+# container running vite; both source trees are bind-mounted, so nothing is
+# rebuilt to see a change.
+#
+# Networking is bridge mode — Docker Desktop and Colima on macOS have no host
+# networking. Outbound to the printers on the LAN works (they are added by
+# static IP), so live status, camera and control are fine. SSDP discovery and
+# the virtual printers do not: those need to bind LAN addresses of their own.
+#
+# Data lives in ./dev-data (gitignored). Seed it from the production instance
+# with scripts/dev-restore.sh.
+
 services:
   bambuddy:
     image: ghcr.io/grengojbo/bambuddy:${BAMBUDDY_TAG:-latest}
@@ -67,3 +90,64 @@ services:
     # through that is how a database ends up with a stale WAL. The headroom is
     # free — the container exits when it is done, not when the timer runs out.
     stop_grace_period: 30s
+
+  frontend:
+    image: node:22-bookworm-slim
+    container_name: bambuddy-dev-frontend
+    restart: "no"
+    working_dir: /app
+    ports:
+      - "${VITE_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/app
+      # node_modules in a named volume, not on the bind mount: it is ~1 GB of
+      # small files, and pushing those through the VM's filesystem translation
+      # makes vite's cold start several times slower.
+      - frontend_node_modules:/app/node_modules
+    environment:
+      # vite.config.dev.ts reads these. The upstream config proxies /api to
+      # localhost, which inside a container means the container itself.
+      BACKEND_URL: http://bambuddy:8000
+      # Set when serving through Tailscale, so vite accepts that Host header
+      # and points HMR at the wss:// endpoint instead of the local one.
+      TS_HOSTNAME: ${TS_HOSTNAME:-}
+    # npm ci only when the volume is empty — every later start goes straight to
+    # vite. `exec` keeps vite as PID 1 so `docker stop` actually reaches it.
+    command:
+      - sh
+      - -c
+      - '[ -d node_modules/vite ] || npm ci; exec npm run dev -- --config vite.config.dev.ts --host 0.0.0.0'
+    depends_on:
+      - bambuddy
+
+  # Publishes the dev stack on the tailnet as https://bambuddy-dev.<tailnet>.ts.net
+  # with a real certificate, so the UI opens from the phone or another machine
+  # without port forwarding. Off by default — it needs an auth key.
+  #
+  # Userspace networking (the image's default) is enough: this container only
+  # accepts tailnet connections and dials the frontend over the compose
+  # network. No TUN device, no NET_ADMIN, nothing privileged.
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: bambuddy-dev-ts
+    hostname: bambuddy-dev
+    restart: "no"
+    environment:
+      # Reusable auth key from the admin console, kept in .env (gitignored).
+      # Not declared required here: compose interpolates before it filters by
+      # profile, so `${TS_AUTHKEY:?...}` would break plain `up` too. The
+      # Makesurefile checks for it before starting this profile.
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_EXTRA_ARGS: --hostname=bambuddy-dev
+    volumes:
+      - ./dev-data/tailscale:/var/lib/tailscale
+      - ./dev/tailscale-serve.json:/config/serve.json:ro
+    depends_on:
+      - frontend
+    profiles:
+      - ts
+
+volumes:
+  frontend_node_modules:
