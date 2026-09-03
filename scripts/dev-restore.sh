@@ -15,9 +15,10 @@
 #   BAMBUDDY_PROD_URL   the production instance to copy from (required; the
 #                       repo is public, so no host is hardcoded here). Read from
 #                       .env, same as the compose stack, or from the environment.
-#   BAMBUDDY_API_KEY    API key on the production instance; needs the
-#                       settings:backup permission. Also read from the
-#                       bambuddy MCP server config in ~/.claude.json.
+#   BAMBUDDY_API_KEY    API key on the production instance. Note that API keys
+#                       are denied settings:backup by design, so the download
+#                       path only works for a session that is allowed it —
+#                       in practice, hand the script a ZIP saved from the UI.
 #   BAMBUDDY_DEV_URL    default http://localhost:8000
 #   BAMBUDDY_DEV_KEY    only needed if auth is enabled in the local copy
 #                       (it will be, once production data is restored)
@@ -119,7 +120,8 @@ else
         rm -f "$ZIP"
         echo "Backup download failed (HTTP $code)." >&2
         case "$code" in
-            401|403) echo "The API key needs the settings:backup permission. Either grant it in Settings → API Keys, or download the ZIP by hand from Settings → Backup and pass it: scripts/dev-restore.sh <file.zip>" >&2 ;;
+            401|403) echo "API keys cannot download backups — settings:backup and settings:restore are on the API-key denylist in backend/app/core/auth.py, so no combination of key permissions authorises this. Download the ZIP from Settings → Backup in the browser and pass it instead:" >&2
+                     echo "  scripts/dev-restore.sh <file.zip>" >&2 ;;
         esac
         exit 1
     fi
