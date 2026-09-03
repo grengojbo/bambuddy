@@ -143,8 +143,26 @@
 
 @goal restore
 @depends_on docker_up
-@doc 'Copy the production instance into the local one (asks before writing)'
-  scripts/dev-restore.sh
+@doc 'Restore a backup into the local copy: newest ~/Downloads/bambuddy-backup*.zip, or ZIP=<path>'
+  # API keys are denied settings:backup, so the ZIP is saved by hand from
+  # Settings → Backup and lands in ~/Downloads. Take the newest one rather than
+  # making the exact timestamped name something to retype.
+  zip=${ZIP:-}
+  if [ -z "$zip" ]; then
+    zip=$HOME/Downloads/bambuddy-backup.zip
+    if [ ! -f "$zip" ]; then
+      zip=$(ls -t "$HOME"/Downloads/bambuddy-backup*.zip 2>/dev/null | head -1)
+    fi
+  fi
+
+  if [ -n "$zip" ] && [ -f "$zip" ]; then
+    echo "Using $zip"
+    scripts/dev-restore.sh "$zip"
+  else
+    # Nothing local — fall back to the API download, which only works for a
+    # principal allowed settings:backup.
+    scripts/dev-restore.sh
+  fi
 
 @goal pull
 @depends_on docker_up

@@ -69,9 +69,12 @@ for arg in "$@"; do
     esac
 done
 
-# The key is already configured for the MCP server; reuse it rather than
-# asking for a second copy in the shell profile.
-if [ -z "${BAMBUDDY_API_KEY:-}" ] && [ -f "$HOME/.claude.json" ]; then
+# The key is already configured for the MCP server; reuse it rather than asking
+# for a second copy in the shell profile. Only consulted when a download is
+# actually going to happen — a restore from a local ZIP needs no key at all.
+find_api_key() {
+    [ -n "${BAMBUDDY_API_KEY:-}" ] && return 0
+    [ -f "$HOME/.claude.json" ] || return 0
     BAMBUDDY_API_KEY="$(python3 - "$HOME/.claude.json" <<'PY' || true
 import json, sys
 try:
@@ -103,7 +106,8 @@ walk(cfg)
 PY
 )"
     [ -n "${BAMBUDDY_API_KEY:-}" ] && echo "Using API key from ~/.claude.json"
-fi
+    export BAMBUDDY_API_KEY
+}
 
 # Compose ships both as a `docker compose` plugin and as a standalone binary,
 # and a machine can have either. Use whichever answers.
@@ -126,6 +130,7 @@ else
     mkdir -p "$OUT_DIR"
     ZIP="$OUT_DIR/bambuddy-prod-$(date +%Y%m%d-%H%M%S).zip"
 
+    find_api_key
     echo "==> Downloading backup from $PROD_URL"
     code=$(curl -sS -o "$ZIP" -w '%{http_code}' \
         -H "$(auth_header "${BAMBUDDY_API_KEY:-}")" \
