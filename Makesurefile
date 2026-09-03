@@ -83,12 +83,17 @@
 @doc 'Start the dev stack and publish it on the tailnet as bambuddy-dev'
 @use_lib compose
   dc --profile ts up -d
+
+  # Goals do not inherit .env — that file is read by compose, not by the shell
+  # makesure runs. Read the name here so the URL printed is the real one.
+  ts_host=${TS_HOSTNAME:-$(sed -n 's/^TS_HOSTNAME=//p' .env 2>/dev/null | head -1)}
+
   echo
-  echo "  UI       https://$TS_HOST.<tailnet>.ts.net"
+  echo "  UI       https://${ts_host:-$TS_HOST.<tailnet>.ts.net}"
   echo "  local    http://localhost:$VITE_PORT"
   echo
-  echo "The exact name is in the sidecar's first log lines:"
-  echo "  dc logs tailscale | head"
+  echo "The certificate is issued on first use — give it a few seconds."
+  echo "  ./makesure logs-ts"
 
 @goal down
 @depends_on docker_up
@@ -113,6 +118,12 @@
 @doc 'Follow the vite log'
 @use_lib compose
   dc logs -f frontend
+
+@goal logs-ts
+@depends_on docker_up
+@use_lib compose
+@doc 'Follow the Tailscale sidecar log'
+  dc logs -f tailscale
 
 @goal ps
 @depends_on docker_up
