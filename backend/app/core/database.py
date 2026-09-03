@@ -4957,6 +4957,10 @@ async def run_migrations(conn):
     # Spoolman and the location sync then imported as storage locations.
     await _migrate_drop_ams_slot_locations(conn)
 
+    # Migration: clear tray_uuid values a SpoolBuddy daemon read from the wrong
+    # tag blocks (#984). They collide across every spool of one filament type.
+    await _migrate_clear_text_artifact_tray_uuids(conn)
+
 
 async def _migrate_rename_ha_sensor_alert_template(conn) -> None:
     """Rename the ha_sensor_alert template to "Printer Sensor Alert" (#2824).
@@ -5195,6 +5199,52 @@ async def _migrate_repair_rfid_core_weight(conn) -> None:
             text('INSERT INTO settings ("key", value) VALUES (:k, :v)'),
             {"k": flag, "v": "true"},
         )
+
+
+async def _migrate_clear_text_artifact_tray_uuids(conn) -> None:
+    """Clear tray_uuid values a SpoolBuddy daemon read from the wrong blocks (#984).
+
+    The tray UUID lives in block 9 of a Bambu tag. A daemon reading blocks 4-5
+    instead picks up the filament description, so a white PLA Basic spool
+    reports ``504C4120426173696300000000000000`` -- the hex of ``"PLA Basic"``
+    -- and so does every other spool of that product. Since the backend
+    identifies spools by tray_uuid, a scan then resolves to an arbitrary one of
+    them and its weight and assignment land on the wrong row.
+
+    Clearing is the only repair available: the real UUID exists solely on the
+    tag, so it comes back on the next scan by a daemon that reads block 9.
+    Until then the spool is still identified by its own tag_uid, which
+    ``get_spool_by_tag`` falls back to.
+
+    Deliberately *not* gated behind a settings flag, unlike the one-shot
+    backfills above. Those are gated because re-running would undo a value the
+    user has since chosen; here there is nothing to undo, and while daemons
+    that predate the fix are still in the field they keep writing new bad rows
+    that a later upgrade should also clean up. Rows holding a real UUID never
+    match the filter, so repeated runs are no-ops.
+    """
+    from sqlalchemy import bindparam, text
+
+    from backend.app.utils.tag_normalization import is_text_artifact_tray_uuid
+
+    async with conn.begin_nested():
+        rows = await conn.execute(text("SELECT id, tray_uuid FROM spool WHERE tray_uuid IS NOT NULL"))
+        bogus = [row[0] for row in rows if is_text_artifact_tray_uuid(row[1])]
+
+    if not bogus:
+        return
+
+    async with conn.begin_nested():
+        await conn.execute(
+            text("UPDATE spool SET tray_uuid = NULL WHERE id IN :ids").bindparams(bindparam("ids", expanding=True)),
+            {"ids": bogus},
+        )
+
+    logger.warning(
+        "[#984] Cleared the tray_uuid on %d spool(s); it held the filament description "
+        "rather than the tag's UUID. Rescan those spools to restore it.",
+        len(bogus),
+    )
 
 
 async def _migrate_backfill_variant_groups(conn) -> None:

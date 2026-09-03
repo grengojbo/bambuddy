@@ -97,6 +97,25 @@ class TagScannedRequest(BaseModel):
     tag_type: str | None = Field(None, max_length=50)
     raw_blocks: dict | None = None
 
+    @field_validator("tray_uuid")
+    @classmethod
+    def drop_text_artifact_uuid(cls, v: str | None) -> str | None:
+        """Discard a tray_uuid a daemon read from the filament description.
+
+        SpoolBuddy daemons that predate the block-9 fix send the contents of tag
+        blocks 4-5 as tray_uuid. It is well-formed hex and passes the pattern
+        above, but it is identical for every spool of that filament, so
+        accepting it matches the scan to an arbitrary spool and writes the
+        collision onto any spool registered from that scan.
+
+        Rejecting the whole request would take a device that is otherwise
+        working offline, so drop just this field and let the unique tag_uid
+        identify the spool.
+        """
+        from backend.app.utils.tag_normalization import is_text_artifact_tray_uuid
+
+        return None if is_text_artifact_tray_uuid(v) else v
+
 
 class TagRemovedRequest(BaseModel):
     device_id: str = Field(..., max_length=50)

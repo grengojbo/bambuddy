@@ -12,6 +12,7 @@ from backend.app.schemas.spool import normalize_effect_type
 from backend.app.services.slot_nozzle import resolve_slot_nozzle
 from backend.app.services.spool_filament_preset import printer_safe_filament_id, resolve_spool_preset
 from backend.app.utils.tag_normalization import (
+    is_text_artifact_tray_uuid,
     normalize_tag_uid as _normalize_tag_uid,
     normalize_tray_uuid as _normalize_tray_uuid,
 )
@@ -412,6 +413,17 @@ async def get_spool_by_tag(db: AsyncSession, tag_uid: str, tray_uuid: str) -> Sp
     """
     tray_uuid_norm = _normalize_tray_uuid(tray_uuid)
     tag_uid_norm = _normalize_tag_uid(tag_uid)
+
+    # A tray_uuid that decodes to ASCII text came from a daemon reading tag
+    # blocks 4-5 instead of block 9, so it is the filament description and is
+    # shared by every spool of that product. Matching on it returns an
+    # arbitrary one of them; tag_uid below is unique per physical tag.
+    if is_text_artifact_tray_uuid(tray_uuid_norm):
+        logger.warning(
+            "[#984] Ignoring tray_uuid %s: filament description from a pre-block-9 SpoolBuddy read",
+            tray_uuid_norm,
+        )
+        tray_uuid_norm = ""
 
     # Try tray_uuid first (Bambu Lab spools — more reliable)
     if tray_uuid_norm and tray_uuid_norm != ZERO_TRAY_UUID and tray_uuid_norm != "0" * len(tray_uuid_norm):
