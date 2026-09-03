@@ -125,6 +125,14 @@
 @doc 'Follow the Tailscale sidecar log'
   dc logs -f tailscale
 
+@goal shell
+@depends_on docker_up
+@use_lib compose
+@doc 'Shell inside a container: SERVICE=frontend ./makesure shell (default bambuddy)'
+  svc=${SERVICE:-bambuddy}
+  # The backend image has bash; node:22-slim only has sh.
+  dc exec "$svc" sh -c 'command -v bash >/dev/null && exec bash || exec sh'
+
 @goal ps
 @depends_on docker_up
 @doc 'What is running'

@@ -6,6 +6,7 @@
 #   scripts/dev-restore.sh --download-only     # just fetch the ZIP
 #   scripts/dev-restore.sh --yes               # no confirmation prompt
 #   scripts/dev-restore.sh --keep-settings     # leave production URLs as they are
+#   scripts/dev-restore.sh --no-auth           # drop the login on the local copy
 #
 # The backup is restored verbatim — virtual printers, smart plugs and their
 # settings come across exactly as production has them (external_url excepted,
@@ -61,12 +62,14 @@ fi
 DOWNLOAD_ONLY=false
 ASSUME_YES=false
 LOCALIZE=true
+DISABLE_AUTH=false
 LOCAL_ZIP=""
 for arg in "$@"; do
     case "$arg" in
         --download-only) DOWNLOAD_ONLY=true ;;
         -y|--yes) ASSUME_YES=true ;;
         --keep-settings) LOCALIZE=false ;;
+        --no-auth) DISABLE_AUTH=true ;;
         -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
         *) LOCAL_ZIP="$arg" ;;
     esac
@@ -264,6 +267,23 @@ for key in ("ha_url", "orcaslicer_api_url", "bambu_studio_api_url"):
     row = db.execute("select value from settings where key=?", (key,)).fetchone()
     if row and row[0]:
         print(f"  left as-is: {key} = {row[0]}")
+PYEOF
+fi
+
+# Opt-in: the restored copy inherits production's users, so the dev instance
+# asks for a login it is inconvenient to type on every rebuild. Turning it off
+# means anything that can reach this instance — every device on the tailnet
+# when the sidecar is up — can drive the real printers, so it stays a choice.
+if [ "$DISABLE_AUTH" = true ]; then
+    echo
+    echo "==> Disabling authentication on the local copy"
+    python3 - "$DATA_DIR/bambuddy.db" <<'PYEOF'
+import sqlite3, sys
+
+db = sqlite3.connect(sys.argv[1])
+db.execute("update settings set value='false' where key='auth_enabled'")
+db.commit()
+print("  auth_enabled -> false (local copy only)")
 PYEOF
 fi
 
