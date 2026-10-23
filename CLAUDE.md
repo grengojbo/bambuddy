@@ -64,6 +64,11 @@ scripts/sync-upstream.sh --merge    # ...і мержить main у master
 ```
 
 Те саме щоночі робить workflow `Sync upstream` (`merge-upstream` API + пуш тегів).
+Гілки він синкає через секрет `SYNC_TOKEN` — fine-grained PAT на цей репозиторій
+із Contents + Workflows (write): `GITHUB_TOKEN` права `workflows` не отримує ніколи
+і падає з 422, щойно upstream чіпає `.github/workflows`. Теги навмисно пушаться
+через `GITHUB_TOKEN`: пуш тегу іншим токеном запустив би апстрімні release-workflow
+з тегованого коміту (Windows-інсталятор створює реліз у форку).
 Мерж `main` → `master` навмисно тільки ручний.
 
 ---

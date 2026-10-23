@@ -24,27 +24,50 @@ jobs:
     # Don't run in anybody else's fork of this fork.
     if: github.repository_owner == 'grengojbo'
     steps:
+      # GITHUB_TOKEN can never be granted the `workflows` permission, so it is
+      # refused (422) whenever the upstream commits being mirrored touch
+      # .github/workflows — which upstream does every few days. SYNC_TOKEN is a
+      # fine-grained PAT scoped to this repo with Contents + Workflows write.
+      #
+      # Side effect: pushes made with a PAT do trigger workflows, so upstream's
+      # CI and CodeQL run on main/dev after each sync. That costs minutes but
+      # publishes nothing.
       - name: Fast-forward mirror branches
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
         run: |
           set -uo pipefail
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::SYNC_TOKEN secret is not set"
+            exit 1
+          fi
+          failed=""
           for branch in main dev; do
             echo "::group::$branch"
             # merge-upstream is a no-op when already in sync and refuses to run
             # (rather than clobbering) when the branch has diverged — exactly the
             # safety we want from a mirror.
-            gh api -X POST "repos/${GITHUB_REPOSITORY}/merge-upstream" \
-              -f branch="$branch" || echo "::warning::merge-upstream failed for $branch"
+            if ! gh api -X POST "repos/${GITHUB_REPOSITORY}/merge-upstream" \
+                -f branch="$branch"; then
+              echo "::error::merge-upstream failed for $branch"
+              failed="$failed $branch"
+            fi
             echo "::endgroup::"
           done
+          # Try both branches before failing, but do fail: a mirror that quietly
+          # stops moving is worse than a red run.
+          [ -z "$failed" ] || exit 1
 
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      # Tags pushed with GITHUB_TOKEN cannot trigger other workflows, so
-      # mirroring upstream release tags here can never kick off a Docker build.
+      # Tags stay on GITHUB_TOKEN deliberately: a tag push runs the workflow
+      # files *as of the tagged commit*, i.e. upstream's release workflows
+      # (Windows installer, Docker Hub publish), which would create releases
+      # in this fork. Pushes made with GITHUB_TOKEN trigger nothing. The tagged
+      # commits already arrived through the branch sync above, so the
+      # `workflows` permission check does not reject the tag refs.
       # (docker-ghcr.yml only listens for `v*-jbo.*` anyway.)
       - name: Mirror upstream tags
         run: |
