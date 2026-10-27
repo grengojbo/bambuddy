@@ -34,7 +34,9 @@ logger = logging.getLogger(__name__)
 #   "ams/<id>"  – original AMS (X1C, X1E, P1S, …)
 #   "n3f/<id>"  – AMS 2 Pro (H2D Pro and similar)
 #   "n3s/<id>"  – AMS HT (H2D Pro and similar; IDs typically start at 128)
-_AMS_MODULE_PREFIXES = ("ams/", "n3f/", "n3s/")
+# Fork: "ams_f1/" is the AMS Lite (A1 / A1 Mini); without it that unit never
+# gets sw_ver/sn/module_type, and services/bmcu.py cannot see a BMCU's version.
+_AMS_MODULE_PREFIXES = ("ams/", "ams_f1/", "n3f/", "n3s/")
 
 # gcode_state values that mean the printer is not idle and must not be handed a
 # new start-print (#2598). The firmware rejects a project_file while busy with
