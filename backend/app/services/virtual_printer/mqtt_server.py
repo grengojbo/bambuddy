@@ -16,6 +16,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from backend.app.services.bmcu import ams_versions_from_modules, drop_bmcu_hms
 from backend.app.services.virtual_printer._debug import append_event, dump_wire
 
 if TYPE_CHECKING:
@@ -867,6 +868,11 @@ class SimpleMQTTServer:
                 # threw it — the user's own printer card in Bambuddy reports the
                 # fault. Zero it in both branches.
                 print_block["print_error"] = 0
+                # Fork: BMCU firmware mismatch; see services/bmcu.py.
+                if "hms" in print_block:
+                    print_block["hms"] = drop_bmcu_hms(
+                        print_block["hms"], ams_versions_from_modules(self._bridge.get_latest_version_modules())
+                    )
                 status = {"print": print_block}
                 dump_wire(self.vp_name, "out", status)
                 await self._publish_to_report(writer, status, serial or self.serial, log_event=log_event)

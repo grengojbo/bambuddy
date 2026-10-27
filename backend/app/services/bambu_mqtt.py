@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
 
+from backend.app.services.bmcu import hide_bmcu_hms
 from backend.app.services.hms_actions import HMSAction, get_actions_for_error_code
 from backend.app.services.hms_errors import alert_level_from_print_error, describe_fault
 from backend.app.utils.ams_drying import ACTIVE_DRY_STATUSES, DRY_COUNTDOWN_STALL_SECONDS
@@ -5322,6 +5323,9 @@ class BambuMQTTClient:
                         # action table still has some short-form entries, so that
                         # lookup falls back to it.
                         full_code = f"{attr:08X}{code:08X}"
+                        # Fork: BMCU firmware mismatch; see services/bmcu.py.
+                        if hide_bmcu_hms(full_code, [v.get("sw_ver", "") for v in self._ams_version_cache.values()]):
+                            continue
                         if full_code == HMS_MQTT_VERIFY_FAILED:
                             verify_failed = True
                         actions = get_actions_for_error_code(self.serial_number[:3], full_code)
