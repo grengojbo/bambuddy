@@ -2508,6 +2508,7 @@ async def _unlink_stale_assignments(printer_id: int, ams_data: list, printing_no
             from backend.app.models.spool import Spool as _Spool
             from backend.app.models.spool_assignment import SpoolAssignment as SA
             from backend.app.services.ams_slot_presence import spool_present
+            from backend.app.services.bmcu import ams_unit_is_bmcu
             from backend.app.services.inventory_mode import spoolman_owns_assignments
 
             # Built-in assignments only. Since #2812 they survive a switch to
@@ -2745,6 +2746,20 @@ async def _unlink_stale_assignments(printer_id: int, ams_data: list, printing_no
                             logger.info(
                                 "Auto-unlink skipped: spool %d AMS%d-T%d — slot still occupied, "
                                 "tray reports no filament data yet",
+                                assignment.spool_id,
+                                assignment.ams_id,
+                                assignment.tray_id,
+                            )
+                            continue
+                        # Fork: a BMCU blanks slots for minutes with the spool
+                        # still in place; see services/bmcu.py.
+                        if (
+                            not cur_color.strip()
+                            and not cur_type.strip()
+                            and ams_unit_is_bmcu(ams_data, assignment.ams_id)
+                        ):
+                            logger.info(
+                                "Auto-unlink skipped: spool %d AMS%d-T%d — blank tray on a BMCU",
                                 assignment.spool_id,
                                 assignment.ams_id,
                                 assignment.tray_id,
