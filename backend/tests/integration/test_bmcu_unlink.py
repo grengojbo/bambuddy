@@ -27,12 +27,12 @@ BMCU = {"module_type": "ams_f1", "sw_ver": "00.00.00.00", "sn": "BMCU0000000001"
 BAMBU_AMS_LITE = {"module_type": "ams_f1", "sw_ver": "00.00.07.48", "sn": "03C00A3B1200001"}
 
 
-def _blank_unit(**unit_fields):
+def _blank_unit(tray_color="", **unit_fields):
     return [
         {
             "id": 1,
             **unit_fields,
-            "tray": [{"id": 1, "exists": False, "tray_type": "", "tray_color": "", "state": 9}],
+            "tray": [{"id": 1, "exists": False, "tray_type": "", "tray_color": tray_color, "state": 9}],
         }
     ]
 
@@ -75,6 +75,24 @@ class TestBmcuBlankTray:
         assert await _survives(db_session, assignment_id), (
             "a BMCU blanking a slot past the grace period is not a spool that was removed"
         )
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_an_all_zero_colour_on_a_bmcu_keeps_the_assignment(
+        self, async_client: AsyncClient, printer_factory, spool_factory, db_session: AsyncSession
+    ):
+        """Production, 15 s after the printer's plug was switched on: the BMCU
+        reported ``tray_color`` 00000000 with no type, and the row was deleted
+        in that same push -- the colour is not blank, so the grace hold never
+        started (``cur=00000000/ fp=FFFFFFFF/PLA``)."""
+        printer = await printer_factory(name="A1 Mini")
+        spool = await spool_factory(material="PLA", rgba="8A8F92FF")
+        assignment_id = await _OccupiedSlot._assignment(db_session, printer, spool)
+
+        ams_data = _blank_unit(tray_color="00000000", **BMCU)
+        await _OccupiedSlot._run(printer.id, ams_data, _status(ams_data))
+
+        assert await _survives(db_session, assignment_id)
 
     @pytest.mark.asyncio
     @pytest.mark.integration

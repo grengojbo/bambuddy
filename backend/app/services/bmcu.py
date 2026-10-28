@@ -41,6 +41,15 @@ def ams_unit_is_bmcu(ams_data: Iterable[Any] | None, ams_id: int) -> bool:
     return False
 
 
+def bmcu_tray_blank(tray_color: str, tray_type: str) -> bool:
+    """A tray report that says nothing about the filament in it.
+
+    No type, and a colour that is empty or all zeros: right after the printer
+    is switched on a BMCU reports ``tray_color`` ``00000000``, not ``""``.
+    """
+    return not (tray_type or "").strip() and not (tray_color or "").strip().strip("0")
+
+
 def ams_versions_from_modules(modules: Iterable[Any] | None) -> list[str]:
     """The ``sw_ver`` of every AMS module in a ``get_version`` module list."""
     if not isinstance(modules, list):
