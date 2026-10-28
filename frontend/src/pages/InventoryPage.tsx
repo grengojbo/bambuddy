@@ -301,7 +301,8 @@ const columnCells: Record<string, (ctx: CellCtx) => ReactNode> = {
   ),
   location: ({ spool, assignmentMap }) => {
     const assignment = assignmentMap[spool.id];
-    if (!assignment) return <span className="text-sm text-bambu-gray">-</span>;
+    // Not loaded in a printer: fall back to where the spool is stored.
+    if (!assignment) return <span className="text-sm text-bambu-gray">{spool.storage_location?.trim() || '-'}</span>;
     const printerLabel = assignment.printer_name || `Printer ${assignment.printer_id}`;
     const isExternal = assignment.ams_id === 254 || assignment.ams_id === 255;
     const isHt = !isExternal && assignment.ams_id >= 128;
@@ -547,7 +548,7 @@ const columnSortValues: Record<
   slicer_filament: (s) => (s.slicer_filament_name || s.slicer_filament || '').toLowerCase(),
   location: (s, am) => {
     const a = am[s.id];
-    if (!a) return '';
+    if (!a) return (s.storage_location || '').trim().toLowerCase();
     const isExt = a.ams_id === 254 || a.ams_id === 255;
     const isHt = !isExt && a.ams_id >= 128;
     const label = a.ams_label ? ` (${a.ams_label})` : '';
