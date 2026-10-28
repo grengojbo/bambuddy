@@ -2300,7 +2300,9 @@ async def _unlink_stale_assignments(printer_id: int, ams_data: list, printing_no
                                 printer_id=printer_id,
                                 ams_id=assignment.ams_id,
                                 tray_id=assignment.tray_id,
-                                current_tray_info_idx=current_tray.get("tray_info_idx", ""),
+                                # Fork: the slot's id is the previous spool's; see
+                                # services/preconfig_preset.py.
+                                current_tray_info_idx="",
                                 current_tray_type=cur_type,
                             )
                             logger.info(

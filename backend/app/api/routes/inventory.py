@@ -69,6 +69,7 @@ from backend.app.services.location_service import (
     rename_location as rename_location_record,
 )
 from backend.app.services.material_number import apply_material_number_inheritance
+from backend.app.services.preconfig_preset import recall_resolved, remember_slot_preset
 from backend.app.services.slicer_filament_resolver import resolve_slicer_filament
 from backend.app.services.slot_nozzle import resolve_slot_nozzle
 from backend.app.services.spool_csv import (
@@ -197,6 +198,10 @@ async def apply_spool_to_slot_via_mqtt(
         slicer_filament=slot_slicer_filament,
         slicer_filament_name=slot_slicer_filament_name,
         material=spool.material,
+    )
+    # Fork: the user-less replay reads back an assign-time lookup; see services/preconfig_preset.py.
+    tray_info_idx, setting_id, sub_brand_override, type_override = recall_resolved(
+        slot_slicer_filament, current_user, (tray_info_idx, setting_id, sub_brand_override, type_override)
     )
     if sub_brand_override:
         tray_sub_brands = sub_brand_override
@@ -2321,6 +2326,18 @@ async def assign_spool(
             data.ams_id,
             data.tray_id,
         )
+        # Fork: the replay runs with no user; see services/preconfig_preset.py.
+        try:
+            await remember_slot_preset(
+                db=db,
+                current_user=current_user,
+                spool=spool,
+                printer_id=data.printer_id,
+                ams_id=data.ams_id,
+                tray_id=data.tray_id,
+            )
+        except Exception as e:
+            logger.warning("Preset lookup for pending spool %d failed: %s", spool.id, e)
 
     await ws_manager.broadcast(
         {
