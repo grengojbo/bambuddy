@@ -157,7 +157,7 @@ describe('InventoryPage - LOCATION column (Spoolman mode)', () => {
     });
   });
 
-  it('shows "-" in LOCATION column when spoolman spool has no slot assignment', async () => {
+  it('shows "-" in LOCATION column when spoolman spool has no slot assignment or storage location', async () => {
     server.use(
       http.get('/api/v1/settings/spoolman', () =>
         HttpResponse.json({
@@ -166,7 +166,7 @@ describe('InventoryPage - LOCATION column (Spoolman mode)', () => {
         })
       ),
       http.get('/api/v1/spoolman/inventory/spools', () =>
-        HttpResponse.json([mockSpoolmanSpool])
+        HttpResponse.json([{ ...mockSpoolmanSpool, storage_location: null }])
       ),
       http.get('/api/v1/spoolman/inventory/slot-assignments/all', () =>
         HttpResponse.json([])
@@ -182,6 +182,61 @@ describe('InventoryPage - LOCATION column (Spoolman mode)', () => {
     // LOCATION cell shows "-" (there may be other "-" cells too — at least one expected).
     const dashCells = screen.getAllByText('-');
     expect(dashCells.length).toBeGreaterThan(0);
+  });
+
+  it('falls back to the storage location when the spool has no slot assignment', async () => {
+    server.use(
+      http.get('/api/v1/settings/spoolman', () =>
+        HttpResponse.json({
+          spoolman_enabled: 'true',
+          spoolman_url: 'http://localhost:7912',
+        })
+      ),
+      http.get('/api/v1/spoolman/inventory/spools', () =>
+        HttpResponse.json([mockSpoolmanSpool])
+      ),
+      http.get('/api/v1/spoolman/inventory/slot-assignments/all', () =>
+        HttpResponse.json([])
+      ),
+    );
+
+    render(<InventoryPageRouter />);
+
+    // Plain grey text like the BRAND column, not the purple printer badge.
+    const cell = await screen.findByText('IKEA Regal');
+    expect(cell).toHaveClass('text-bambu-gray');
+    expect(cell.className).not.toContain('purple');
+  });
+
+  it('shows the printer slot, not the storage location, for an assigned spool', async () => {
+    server.use(
+      http.get('/api/v1/settings/spoolman', () =>
+        HttpResponse.json({
+          spoolman_enabled: 'true',
+          spoolman_url: 'http://localhost:7912',
+        })
+      ),
+      http.get('/api/v1/spoolman/inventory/spools', () =>
+        HttpResponse.json([mockSpoolmanSpool])
+      ),
+      http.get('/api/v1/spoolman/inventory/slot-assignments/all', () =>
+        HttpResponse.json([
+          {
+            printer_id: 1,
+            printer_name: 'Sully',
+            ams_id: 0,
+            tray_id: 2,
+            spoolman_spool_id: 216,
+            ams_label: null,
+          },
+        ])
+      ),
+    );
+
+    const { container } = render(<InventoryPageRouter />);
+
+    await waitFor(() => expect(container.textContent).toContain('Sully'));
+    expect(screen.queryByText('IKEA Regal')).toBeNull();
   });
 
   it('does not call /spoolman/inventory/slot-assignments/all in local mode', async () => {
