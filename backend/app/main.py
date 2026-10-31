@@ -4507,6 +4507,7 @@ async def _dispatch_outcome_confirmation_safely(
     data: dict,
     archive_id: int,
     archive_data: dict | None = None,
+    run_id: int | None = None,
 ) -> None:
     """``dispatch_outcome_confirmation`` for a caller that has more to do on ``db``.
 
@@ -4517,7 +4518,7 @@ async def _dispatch_outcome_confirmation_safely(
     the reason the email never goes out.
     """
     try:
-        await dispatch_outcome_confirmation(db, printer_id, printer_name, data, archive_id, archive_data)
+        await dispatch_outcome_confirmation(db, printer_id, printer_name, data, archive_id, archive_data, run_id=run_id)
     except Exception as e:
         logging.getLogger(__name__).error("[NOTIFY-BG] Outcome-confirmation dispatch failed: %s", e, exc_info=True)
         try:
@@ -4549,14 +4550,18 @@ async def dispatch_outcome_confirmation(
     data: dict,
     archive_id: int,
     archive_data: dict | None = None,
+    *,
+    run_id: int | None = None,
 ) -> bool:
-    """Emit the post-print outcome prompt for a completed archive (#1898).
+    """Emit the post-print outcome prompt for a completed print (#1898).
 
-    Gated on the archive itself: ``confirm_requested`` is the opt-in (from the
-    queue item, or from ``confirm_outcome_external_prints`` for a print
-    Bambuddy did not start) and ``user_verdict`` being unset is what makes the
-    question still open. Mints the per-archive capability token the one-tap
-    verdict links carry.
+    Gated on the run that ended (``run_id``): ``confirm_requested`` is the
+    opt-in (from the queue item, or from ``confirm_outcome_external_prints``
+    for a print Bambuddy did not start, copied onto the run at its start) and
+    ``user_verdict`` being unset is what makes the question still open. Mints
+    the run's capability token the one-tap verdict links carry: plates of one
+    archive each have their own question. Without a run, the archive's, as
+    before runs.
 
     Lives here rather than inline in ``on_print_complete``'s notification task
     because that task swallows every exception: extracted, the gate and the two
@@ -4567,9 +4572,19 @@ async def dispatch_outcome_confirmation(
     """
     logger = logging.getLogger(__name__)
     from backend.app.models.archive import PrintArchive
+    from backend.app.models.print_log import PrintLogEntry
 
     confirm_archive = (await db.execute(select(PrintArchive).where(PrintArchive.id == archive_id))).scalar_one_or_none()
-    if not (confirm_archive and confirm_archive.confirm_requested and confirm_archive.user_verdict is None):
+    if confirm_archive is None:
+        return False
+    run = await db.get(PrintLogEntry, run_id) if run_id is not None else None
+    if run is not None and run.archive_id != archive_id:
+        run = None
+    # The run carries the opt-in from its start; one logged before it did
+    # (None) asks as its archive does.
+    asks = confirm_archive if run is None or run.confirm_requested is None else run
+    holder = run if run is not None else confirm_archive
+    if not (asks.confirm_requested and holder.user_verdict is None):
         return False
 
     import secrets as _secrets
@@ -4578,9 +4593,9 @@ async def dispatch_outcome_confirmation(
     # "has a token" no longer means "answerable". A prompt going out now needs a
     # live one: mint a new token whenever the stored one is already spent, or
     # every button in the new message would land on the already-answered page.
-    if not confirm_archive.confirm_token or confirm_archive.confirm_token_used_at is not None:
-        confirm_archive.confirm_token = _secrets.token_urlsafe(32)
-        confirm_archive.confirm_token_used_at = None
+    if not holder.confirm_token or holder.confirm_token_used_at is not None:
+        holder.confirm_token = _secrets.token_urlsafe(32)
+        holder.confirm_token_used_at = None
         await db.commit()
 
     from backend.app.api.routes.settings import get_external_base_url, get_setting
@@ -4597,15 +4612,16 @@ async def dispatch_outcome_confirmation(
             "Set Settings → External URL so they resolve away from this host.",
             base,
         )
-    token = confirm_archive.confirm_token
+    token = holder.confirm_token
     good_url = f"{base}/api/v1/archives/confirm/{token}/good"
     reject_url = f"{base}/api/v1/archives/confirm/{token}/reject"
-    confirm_url = f"{base}/archives?confirm={archive_id}"
+    confirm_url = f"{base}/archives?confirm={archive_id}" + (f"&run={run.id}" if run is not None else "")
 
     await ws_manager.send_print_confirm_request(
         printer_id,
         {
             "archive_id": archive_id,
+            "run_id": run.id if run is not None else None,
             "print_name": confirm_archive.print_name or confirm_archive.filename,
         },
         user_ids=await _outcome_answerers(db, confirm_archive.created_by_id),
@@ -4620,6 +4636,7 @@ async def dispatch_outcome_confirmation(
         reject_url=reject_url,
         confirm_url=confirm_url,
         archive_id=archive_id,
+        run_id=run.id if run is not None else None,
     )
     return True
 
@@ -10238,7 +10255,7 @@ async def _close_out_print(printer_id: int, data: dict):
                 # along with the prompt.
                 if print_status == "completed" and archive_id:
                     await _dispatch_outcome_confirmation_safely(
-                        db, printer_id, printer_name, data, archive_id, archive_data
+                        db, printer_id, printer_name, data, archive_id, archive_data, run_id=completed_run_id
                     )
 
                 # Send user-specific email notification

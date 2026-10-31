@@ -920,6 +920,9 @@ export interface Archive {
   user_verdict_source: VerdictSource | null;
   user_verdict_at: string | null;
   confirm_requested: boolean;
+  // The run whose outcome this shows, when it shows one run of the archive
+  // (a plate printed on its own) rather than its latest (#1898).
+  run_id?: number | null;
   quantity: number;
   energy_kwh: number | null;
   energy_cost: number | null;
@@ -5671,7 +5674,8 @@ export const api = {
     const qs = params.toString();
     return request<ArchiveSlim[]>(`/archives/slim${qs ? `?${qs}` : ''}`);
   },
-  getArchive: (id: number) => request<Archive>(`/archives/${id}`),
+  getArchive: (id: number, runId?: number | null) =>
+    request<Archive>(`/archives/${id}${runId != null ? `?run_id=${runId}` : ''}`),
   getArchiveRuns: (id: number) => request<PrintLogResponse>(`/archives/${id}/runs`),
   /**
    * Pre-flight for the delete-confirm modal (#1734). Returns the number of
@@ -5713,6 +5717,8 @@ export const api = {
     // Which surface answered. The backend only accepts the sources a client
     // can honestly claim and defaults to 'api' when none is given.
     user_verdict_source?: 'dialog' | 'printer_card';
+    // The run the verdict / outcome is for; omitted means the latest run.
+    run_id?: number;
   }) =>
     request<Archive>(`/archives/${id}`, {
       method: 'PATCH',

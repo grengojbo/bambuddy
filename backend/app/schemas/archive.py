@@ -50,6 +50,10 @@ class ArchiveUpdate(IgnoresNullForRequiredColumns, ArchiveBase):
     # totals: 100 kg is far past any single print and well short of a value
     # that would swamp a chart.
     filament_used_grams: Annotated[float | None, Field(ge=0, le=100_000)] = None
+    # The run (print log entry) a verdict, status or failure reason is for:
+    # plates of one archive are runs of their own. Omitted means the
+    # archive's latest run.
+    run_id: int | None = None
 
 
 class ArchiveDuplicate(BaseModel):
@@ -126,6 +130,9 @@ class ArchiveResponse(BaseModel):
     user_verdict_source: str | None = None
     user_verdict_at: datetime | None = None
     confirm_requested: bool = False
+    # The run (print log entry) whose outcome this response shows, when it
+    # shows one run of the archive rather than its latest (#1898).
+    run_id: int | None = None
 
     # Energy tracking
     energy_kwh: float | None = None

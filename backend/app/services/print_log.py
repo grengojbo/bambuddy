@@ -161,7 +161,7 @@ _MIRRORED_FROM_RUN = ("status", "started_at", "completed_at", "failure_reason")
 
 async def mirror_latest_run(db: AsyncSession, archive_id: int) -> None:
     """Give the archive its latest run's outcome, by start: status, times,
-    failure reason and plate. Only once none of its runs is printing: until
+    failure reason, plate and verdict. Only once none of its runs is printing: until
     the print's start, end, reconcile and timelapse look their print up by
     its run, they still go by the archive's printer, status and start, which
     a print running elsewhere must not move under them. While one prints,
@@ -191,6 +191,16 @@ async def mirror_latest_run(db: AsyncSession, archive_id: int) -> None:
         setattr(archive, name, getattr(latest, name))
     if latest.plate_id is not None:
         archive.plate_id = latest.plate_id
+    # Its outcome verdict too (#1898), once the run holds its own: it has one,
+    # or was opened at its start with its opt-in. A run logged before then
+    # may never have been given the archive's, which stays. Runs logged
+    # before they kept the verdict's provenance have only its value: the
+    # archive's own provenance stays with that same verdict.
+    owns_verdict = latest.user_verdict is not None or latest.confirm_requested is not None
+    if owns_verdict and (latest.user_verdict != archive.user_verdict or latest.user_verdict_source is not None):
+        archive.user_verdict = latest.user_verdict
+        archive.user_verdict_source = latest.user_verdict_source
+        archive.user_verdict_at = latest.user_verdict_at
 
 
 async def mirror_archive_cost(

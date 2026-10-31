@@ -32,6 +32,7 @@ from backend.app.core.permissions import Permission
 from backend.app.core.printer_scope import PrinterScope
 from backend.app.models.archive import PrintArchive
 from backend.app.models.filament import Filament
+from backend.app.models.print_log import PrintLogEntry
 from backend.app.models.printer import Printer
 from backend.app.models.project import Project
 from backend.app.models.spool_usage_history import SpoolUsageHistory
@@ -46,8 +47,6 @@ from backend.app.services.filament_requirements import annotate_rack_groups
 from backend.app.services.print_confirmation import (
     is_one_tap_request,
     is_unattended_fetch,
-    retire_confirm_token,
-    stamp_verdict,
 )
 from backend.app.services.print_cost_estimate import default_cost_per_kg as _default_cost_per_kg, price_one_print
 from backend.app.services.print_storage import (
@@ -342,6 +341,34 @@ async def _load_run_aggregates(db: AsyncSession, archive_ids: list[int]) -> dict
     return aggregates
 
 
+# What PATCH with a run_id may change: one run's outcome.
+_RUN_OUTCOME_FIELDS = frozenset({"user_verdict", "failure_reason", "status"})
+
+
+def _with_run_outcome(data: dict, run: PrintLogEntry) -> dict:
+    """An archive response showing one of its runs: that print's printer,
+    outcome, times, plate and verdict instead of the latest run's."""
+    data.update(
+        {
+            "run_id": run.id,
+            "printer_id": run.printer_id if run.printer_id is not None else data["printer_id"],
+            "status": run.status,
+            "started_at": run.started_at,
+            "completed_at": run.completed_at,
+            "plate_id": run.plate_id if run.plate_id is not None else data["plate_id"],
+            "failure_reason": run.failure_reason,
+            "user_verdict": run.user_verdict,
+            "user_verdict_source": run.user_verdict_source,
+            "user_verdict_at": run.user_verdict_at,
+            # A run logged before runs carried the opt-in asks as its archive.
+            "confirm_requested": bool(run.confirm_requested)
+            if run.confirm_requested is not None
+            else data["confirm_requested"],
+        }
+    )
+    return data
+
+
 def archive_to_response(
     archive: PrintArchive,
     duplicates: list[dict] | None = None,
@@ -577,21 +604,67 @@ async def list_last_archive_per_printer(
     ),
     printer_scope: PrinterScope = RequestPrinterScope,
 ):
-    """The most recent archive of every printer, for the printer cards.
+    """The latest print of every printer, for the printer cards: its archive
+    as that run printed (``run_id``, its outcome and verdict).
 
-    One query for the whole Printers page instead of one list request per card.
-    Leaves out the duplicate detection the full listing does: the card shows a
-    name and an outcome prompt, and on a farm that scan ran once per printer
-    on every page load.
+    By the printer's latest run: plates of one archive on two printers are
+    each their printer's last print, while the archive names only the one
+    started last. A printer with no run logged gets its latest archive, as
+    before runs. One query for the whole Printers page instead of one list
+    request per card. Leaves out the duplicate detection the full listing
+    does: the card shows a name and an outcome prompt, and on a farm that scan
+    ran once per printer on every page load.
     """
+    from sqlalchemy.orm import selectinload
+
+    from backend.app.models.print_log import INCLUDE_OPEN_RUNS
+
     user, can_read_all = auth_result
-    filters = [PrintArchive.deleted_at.is_(None), PrintArchive.printer_id.isnot(None)]
+    filters: list[ColumnElement[bool]] = [PrintArchive.deleted_at.is_(None)]
     if user is not None and not can_read_all:
         filters.append(PrintArchive.created_by_id == user.id)
-    # Only printers the caller may see (#1727)
-    if (clause := printer_scope.where(PrintArchive.printer_id)) is not None:
-        filters.append(clause)
 
+    run_filters: list[ColumnElement[bool]] = [PrintLogEntry.printer_id.isnot(None)]
+    # Only printers the caller may see (#1727): the run's, and the archive's
+    # too, which the archive page and its edit go by.
+    if (clause := printer_scope.where(PrintLogEntry.printer_id)) is not None:
+        run_filters.append(clause)
+    if (clause := printer_scope.where(PrintArchive.printer_id)) is not None:
+        run_filters.append(clause)
+    ranked_runs = (
+        select(
+            PrintLogEntry.id,
+            func.row_number()
+            .over(
+                partition_by=PrintLogEntry.printer_id,
+                # As the archives below: a run without a start (logged
+                # without one) by when it was logged.
+                order_by=(
+                    func.coalesce(PrintLogEntry.started_at, PrintLogEntry.created_at).desc(),
+                    PrintLogEntry.id.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .join(PrintArchive, PrintArchive.id == PrintLogEntry.archive_id)
+        .where(*run_filters, *filters)
+        .subquery()
+    )
+    # The print running now counts: its card shows it, not the one before.
+    runs = (
+        await db.scalars(
+            select(PrintLogEntry)
+            .where(PrintLogEntry.id.in_(select(ranked_runs.c.id).where(ranked_runs.c.rn == 1)))
+            .execution_options(**{INCLUDE_OPEN_RUNS: True})
+        )
+    ).all()
+    printers_with_runs = {r.printer_id for r in runs}
+
+    archive_filters: list[ColumnElement[bool]] = [*filters, PrintArchive.printer_id.isnot(None)]
+    if (clause := printer_scope.where(PrintArchive.printer_id)) is not None:
+        archive_filters.append(clause)
+    if printers_with_runs:
+        archive_filters.append(PrintArchive.printer_id.not_in(printers_with_runs))
     ranked = (
         select(
             PrintArchive.id,
@@ -608,21 +681,25 @@ async def list_last_archive_per_printer(
             )
             .label("rn"),
         )
-        .where(*filters)
+        .where(*archive_filters)
         .subquery()
     )
-
-    from sqlalchemy.orm import selectinload
-
+    without_runs = set((await db.scalars(select(ranked.c.id).where(ranked.c.rn == 1))).all())
+    archive_ids = {r.archive_id for r in runs} | without_runs
     result = await db.execute(
         select(PrintArchive)
         .options(selectinload(PrintArchive.project), selectinload(PrintArchive.created_by))
-        .where(PrintArchive.id.in_(select(ranked.c.id).where(ranked.c.rn == 1)))
-        .order_by(PrintArchive.printer_id)
+        .where(PrintArchive.id.in_(archive_ids))
     )
-    archives = list(result.scalars().all())
-    run_aggregates = await _load_run_aggregates(db, [a.id for a in archives])
-    return [archive_to_response(a, run_aggregate=run_aggregates.get(a.id)) for a in archives]
+    archives = {a.id: a for a in result.scalars().all()}
+    run_aggregates = await _load_run_aggregates(db, list(archives))
+
+    def response(archive: PrintArchive) -> dict:
+        return archive_to_response(archive, run_aggregate=run_aggregates.get(archive.id))
+
+    cards = [_with_run_outcome(response(archives[r.archive_id]), r) for r in runs if r.archive_id in archives]
+    cards += [response(archives[i]) for i in without_runs if i in archives]
+    return sorted(cards, key=lambda card: card["printer_id"])
 
 
 @router.get("/no-3mf-warning")
@@ -1810,11 +1887,17 @@ async def get_archive(
         )
     ),
     printer_scope: PrinterScope = RequestPrinterScope,
+    run_id: int | None = Query(None, description="Show this run's outcome instead of the latest run's"),
 ):
-    """Get a specific archive."""
+    """Get a specific archive. With ``run_id``, as that run of it printed."""
+    from backend.app.services.print_confirmation import run_of_archive
+
     user, can_read_all = auth_result
     service = ArchiveService(db)
     archive = _ensure_archive_visible(await service.get_archive(archive_id), user, can_read_all, printer_scope)
+    run = await run_of_archive(db, archive.id, run_id) if run_id is not None else None
+    if run_id is not None and (run is None or not printer_scope.allows(run.printer_id)):
+        raise HTTPException(404, "Run not found")
 
     # Find duplicates
     makerworld_id = archive.extra_data.get("makerworld_model_id") if archive.extra_data else None
@@ -1826,7 +1909,8 @@ async def get_archive(
         visible=_visible_archive_clauses(user, can_read_all, printer_scope),
     )
     run_aggregates = await _load_run_aggregates(db, [archive.id])
-    return archive_to_response(archive, duplicates, run_aggregate=run_aggregates.get(archive.id))
+    data = archive_to_response(archive, duplicates, run_aggregate=run_aggregates.get(archive.id))
+    return _with_run_outcome(data, run) if run is not None else data
 
 
 @router.get("/{archive_id}/delete-impact")
@@ -1988,6 +2072,23 @@ async def update_archive(
             raise HTTPException(400, "Project not found")
     # #1898: how the verdict arrived is recorded with it, never on its own.
     verdict_source = update_payload.pop("user_verdict_source", None)
+    verdict_given = "user_verdict" in update_payload
+    new_verdict = update_payload.pop("user_verdict", None)
+    # The outcome of one run of the archive (a plate printed on its own): that
+    # run's, and the archive's only when it is the archive's latest.
+    from backend.app.services.print_confirmation import latest_run, record_verdict, run_of_archive
+
+    target_run = None
+    run_outcome: dict = {}
+    if (run_id := update_payload.pop("run_id", None)) is not None:
+        if set(update_payload) - _RUN_OUTCOME_FIELDS:
+            raise HTTPException(400, "run_id applies to a run's outcome only: its verdict, status and failure reason")
+        target_run = await run_of_archive(db, archive_id, run_id)
+        # A run printed on a printer outside the caller's scope is not theirs
+        # to judge, as on the print log (#1727).
+        if target_run is None or not printer_scope.allows(target_run.printer_id):
+            raise HTTPException(404, "Run not found")
+        run_outcome = {field: update_payload.pop(field) for field in list(update_payload)}
     for field, value in update_payload.items():
         setattr(archive, field, value)
 
@@ -2001,18 +2102,6 @@ async def update_archive(
     ):
         archive.cost = await _one_print_cost(db, archive, previous_grams=previous_filament_grams)
         repriced = True
-
-    # #1898: a landed verdict retires the one-tap capability token from the
-    # push notification — the links stop changing anything once someone
-    # decided, and report the recorded verdict instead. Clearing the verdict
-    # drops the provenance but leaves the token spent: it was used.
-    if "user_verdict" in update_payload:
-        if update_payload["user_verdict"] is None:
-            archive.user_verdict_source = None
-            archive.user_verdict_at = None
-        else:
-            stamp_verdict(archive, verdict_source or "api")
-            retire_confirm_token(archive)
 
     # #1444: Mirror per-run classification fields to the most recent
     # PrintLogEntry for this archive. PrintLogEntry.failure_reason is captured
@@ -2031,7 +2120,7 @@ async def update_archive(
     # print that archived without its 3MF, no figure at all.
     # While the archive is being reprinted its newest entry is the previous
     # run's, whose outcome this edit is not about.
-    mirror_fields = {"failure_reason", "status", "filament_used_grams", "user_verdict"}
+    mirror_fields = {"failure_reason", "status", "filament_used_grams"}
     to_mirror = {k: v for k, v in update_payload.items() if k in mirror_fields}
     if to_mirror and previous_status != "printing":
         from backend.app.models.print_log import PrintLogEntry
@@ -2069,6 +2158,26 @@ async def update_archive(
         from backend.app.services.print_log import mirror_archive_cost
 
         await mirror_archive_cost(db, archive, previous_cost)
+
+    if target_run is not None:
+        for field, value in run_outcome.items():
+            setattr(target_run, field, value)
+    # #1898: the verdict lands on its run (the one asked about, else the
+    # archive's latest; not while the archive is being reprinted, its latest
+    # being the previous print) and retires that run's one-tap token: the links
+    # stop changing anything once someone decided, and report the recorded
+    # verdict instead. Clearing the verdict drops the provenance but leaves the
+    # token spent: it was used.
+    if verdict_given:
+        verdict_run = target_run
+        if verdict_run is None and previous_status != "printing":
+            verdict_run = await latest_run(db, archive_id)
+        await record_verdict(db, archive, new_verdict, source=verdict_source or "api", run=verdict_run)
+    if target_run is not None:
+        from backend.app.services.print_log import mirror_latest_run
+
+        await db.flush()
+        await mirror_latest_run(db, archive_id)
 
     await db.commit()
 
@@ -3759,26 +3868,29 @@ def _confirm_page(glyph: str, heading: str, body: str) -> str:
     )
 
 
-async def _render_already_answered_page(db: AsyncSession, archive: PrintArchive) -> str:
+async def _render_already_answered_page(
+    db: AsyncSession, archive: PrintArchive, run: PrintLogEntry | None = None
+) -> str:
     """Explain a spent one-tap link instead of calling it invalid.
 
     The plate-clear default, the app and the other link all answer the same
     prompt, so the button in a push notification is routinely tapped after the
     question is settled. Report the verdict on file, when and how it landed,
-    and where to change it.
+    and where to change it: of the run the link asked about, when it did.
     """
     from backend.app.api.routes.settings import get_external_base_url
 
     name = html_escape(archive.print_name or archive.filename or "")
+    answered = run if run is not None else archive
     # The verdict's own timestamp, not the moment the token was spent: a
     # verdict changed later in the app would otherwise be dated by the older
     # event. Pre-#1898 rows have neither, and then the page omits the date.
-    used_at = archive.user_verdict_at or archive.confirm_token_used_at
+    used_at = answered.user_verdict_at or answered.confirm_token_used_at
     if used_at is not None and used_at.tzinfo is not None:
         used_at = used_at.astimezone(timezone.utc)
     when = used_at.strftime("%Y-%m-%d %H:%M UTC") if used_at else None
-    how = _VERDICT_SOURCE_PHRASES.get(archive.user_verdict_source or "")
-    label = _VERDICT_LABELS.get(archive.user_verdict or "")
+    how = _VERDICT_SOURCE_PHRASES.get(answered.user_verdict_source or "")
+    label = _VERDICT_LABELS.get(answered.user_verdict or "")
 
     if label:
         recorded = f"Recorded as <strong>{label}</strong>"
@@ -3792,8 +3904,9 @@ async def _render_already_answered_page(db: AsyncSession, archive: PrintArchive)
         recorded = "This prompt was already answered and the verdict has since been cleared."
 
     base = await get_external_base_url(db)
-    link = html_escape(f"{base}/archives?confirm={archive.id}", quote=True)
-    glyph = "&#10003;" if archive.user_verdict == "good" else "&#10007;" if archive.user_verdict else "&#8505;"
+    run_param = f"&run={run.id}" if run is not None else ""
+    link = html_escape(f"{base}/archives?confirm={archive.id}{run_param}", quote=True)
+    glyph = "&#10003;" if answered.user_verdict == "good" else "&#10007;" if answered.user_verdict else "&#8505;"
     return _confirm_page(
         glyph,
         "Already answered",
@@ -3868,18 +3981,21 @@ def _confirm_response(html: str):
     return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
 
-async def _load_confirmable_archive(db: AsyncSession, token: str, verdict: str) -> PrintArchive:
-    """Resolve a one-tap capability token, or raise the route's 400/404."""
+async def _load_confirmable_archive(
+    db: AsyncSession, token: str, verdict: str
+) -> tuple[PrintArchive, PrintLogEntry | None]:
+    """Resolve a one-tap capability token, or raise the route's 400/404: the
+    archive with the run the token asks about (None for an archive's own
+    token, minted before runs had theirs)."""
+    from backend.app.services.print_confirmation import confirm_token_holder
+
     if verdict not in ("good", "reject"):
         raise HTTPException(400, "Verdict must be 'good' or 'reject'")
 
-    result = await db.execute(
-        select(PrintArchive).where(PrintArchive.confirm_token == token, PrintArchive.confirm_token.isnot(None))
-    )
-    archive = result.scalar_one_or_none()
-    if not archive:
+    found = await confirm_token_holder(db, token)
+    if found is None:
         raise HTTPException(404, "Confirmation link is invalid or was already used")
-    return archive
+    return found
 
 
 @router.get("/confirm/{token}/{verdict}")
@@ -3908,12 +4024,12 @@ async def confirm_outcome_page(
     including a scanner that runs JavaScript -- the marker is on the buttons,
     not in the message text a scanner reads.
     """
-    archive = await _load_confirmable_archive(db, token, verdict)
+    archive, run = await _load_confirmable_archive(db, token, verdict)
 
-    if archive.confirm_token_used_at is not None:
+    if (run or archive).confirm_token_used_at is not None:
         # Answered already — by hand, by the other link, by the plate-clear
         # default or by a reaction. Report what is on file and change nothing.
-        return _confirm_response(await _render_already_answered_page(db, archive))
+        return _confirm_response(await _render_already_answered_page(db, archive, run))
 
     return _confirm_response(_render_confirm_prompt_page(request, archive, verdict))
 
@@ -3939,25 +4055,16 @@ async def confirm_outcome_by_token(
     button, which performs its own request from the phone and is configured
     with ``method=POST``. Returns a small HTML page for the phone browser.
     """
-    archive = await _load_confirmable_archive(db, token, verdict)
+    from backend.app.services.print_confirmation import latest_run, record_verdict
 
-    if archive.confirm_token_used_at is not None:
-        return _confirm_response(await _render_already_answered_page(db, archive))
+    archive, run = await _load_confirmable_archive(db, token, verdict)
 
-    archive.user_verdict = verdict
-    stamp_verdict(archive, "link")
-    retire_confirm_token(archive)
+    if (run or archive).confirm_token_used_at is not None:
+        return _confirm_response(await _render_already_answered_page(db, archive, run))
 
-    # Same mirror as the PATCH route (#1444): verdict-aware statistics read
-    # print_log_entries, so the latest run must carry the verdict too.
-    from backend.app.models.print_log import PrintLogEntry
-
-    latest_entry = await db.scalar(
-        select(PrintLogEntry).where(PrintLogEntry.archive_id == archive.id).order_by(PrintLogEntry.id.desc()).limit(1)
-    )
-    if latest_entry is not None:
-        latest_entry.user_verdict = verdict
-
+    # The run the link asks about; an archive's own token, sent before runs
+    # had theirs, answers its latest. Verdict-aware statistics read the run.
+    await record_verdict(db, archive, verdict, source="link", run=run or await latest_run(db, archive.id))
     await db.commit()
 
     label = "Good part" if verdict == "good" else "Rejected"

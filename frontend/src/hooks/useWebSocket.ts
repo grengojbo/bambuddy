@@ -407,7 +407,7 @@ export function useWebSocket() {
         // #1898: a completed print asked for its outcome verdict. Handed to
         // the globally mounted ConfirmOutcomeDialog in Layout via the same
         // CustomEvent relay plate_not_empty uses.
-        const detail = (message as unknown as { data?: { archive_id?: number; print_name?: string } }).data;
+        const detail = (message as unknown as { data?: { archive_id?: number; run_id?: number | null; print_name?: string } }).data;
         if (detail?.archive_id != null) {
           window.dispatchEvent(new CustomEvent('print-confirm-request', { detail }));
         }

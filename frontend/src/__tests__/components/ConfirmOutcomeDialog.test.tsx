@@ -189,4 +189,29 @@ describe('ConfirmOutcomeDialog', () => {
       'Recorded when the plate was cleared.'
     );
   });
+
+  it('asks about the plate it was opened for and answers that one', async () => {
+    // Plates of one archive each have their own question: the dialog reads
+    // and answers its run, not the archive's latest.
+    const user = userEvent.setup();
+    let requestedRun: string | null = null;
+    server.use(
+      http.get('/api/v1/archives/42', ({ request }) => {
+        requestedRun = new URL(request.url).searchParams.get('run_id');
+        return HttpResponse.json({ ...baseArchive, run_id: 7 });
+      }),
+    );
+    render(<ConfirmOutcomeDialog archiveId={42} runId={7} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Bracket')).toBeInTheDocument();
+    });
+    expect(requestedRun).toBe('7');
+
+    await user.click(screen.getByText('Good'));
+
+    await waitFor(() => {
+      expect(patchPayload).toEqual({ user_verdict: 'good', user_verdict_source: 'dialog', run_id: 7 });
+    });
+  });
 });
