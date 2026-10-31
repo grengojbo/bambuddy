@@ -386,6 +386,48 @@ async def test_the_layer_timelapse_is_attached_for_the_run_that_ended(test_engin
     attach.assert_awaited_once()
     archive_id, path, _plate, run_started_at = attach.await_args.args
     assert (archive_id, path, run_started_at) == (queued_print["archive"], stitched, datetime(2026, 10, 19, 8, 0))
+    # And its run, which the video is for (archive redesign).
+    _archive, _item, logs, _charges = await _rows(db_session, queued_print["archive"], queued_print["item"])
+    assert attach.await_args.kwargs["run_id"] == logs[0].id
+
+
+async def test_the_timelapse_scan_is_for_the_run_that_ended(test_engine, db_session, queued_print):
+    with patch("backend.app.main._schedule_timelapse_scan") as schedule:
+        await _complete(test_engine, queued_print["printer"], "completed", extra={"timelapse_was_active": True})
+
+    _archive, _item, logs, _charges = await _rows(db_session, queued_print["archive"], queued_print["item"])
+    assert schedule.call_args.kwargs["run_id"] == logs[0].id
+
+
+async def test_the_finish_photo_is_the_ended_runs_too(test_engine, db_session, queued_print):
+    from backend.app.core.tasks import spawn_background_task
+
+    # The SQLite test database is one shared connection: tasks writing at the
+    # same time fail each other, which a real database does not. They take
+    # turns, but for the notification, which waits for the photo.
+    turn = asyncio.Lock()
+
+    async def in_turn(coro):
+        async with turn:
+            return await coro
+
+    def spawn(coro, name=None, **kwargs):
+        return spawn_background_task(coro if name == "photo-then-notify" else in_turn(coro), name=name, **kwargs)
+
+    capture = AsyncMock(return_value=("finish.jpg", False))
+    with (
+        patch("backend.app.main.spawn_background_task", side_effect=spawn),
+        patch("backend.app.main._capture_finish_photo_from_timelapse", capture),
+        patch("backend.app.main._schedule_timelapse_scan"),
+        # Off by default; the archive's 3MF-less test row still takes photos.
+        patch("backend.app.api.routes.settings.get_setting", AsyncMock(return_value="true")),
+    ):
+        await _complete(test_engine, queued_print["printer"], "completed", extra={"timelapse_was_active": True})
+
+    archive, _item, logs, _charges = await _rows(db_session, queued_print["archive"], queued_print["item"])
+    assert capture.await_args.kwargs["run_id"] == logs[0].id
+    assert logs[0].photos == ["finish.jpg"]
+    assert archive.photos == ["finish.jpg"]
 
 
 async def test_the_registered_mapping_is_drained_when_the_printer_reported_one(test_engine, db_session, queued_print):

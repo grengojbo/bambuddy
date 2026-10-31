@@ -1896,6 +1896,7 @@ class ArchiveService:
         filename: str = "timelapse.mp4",
         *,
         plate_id: int | None = None,
+        run_id: int | None = None,
     ) -> bool:
         """Attach a timelapse video to an archive.
 
@@ -1905,8 +1906,15 @@ class ArchiveService:
         ``plate_id`` is the plate whose run produced the video, when the caller
         knows it; print start uses it to tell a reprint from the next plate of
         a shared archive (#3275).
+
+        ``run_id`` is the print whose video it is (archive redesign): the
+        video is that run's, and the archive's only while that run is the
+        one it shows, its newest. Without one (attached by hand) it is the
+        archive's and its newest run's.
         """
         import asyncio
+
+        from backend.app.services.print_log import is_newest_run, newest_run, run_of
 
         archive = await self.get_archive(archive_id)
         if not archive:
@@ -1942,6 +1950,10 @@ class ArchiveService:
                 archive_id,
             )
             return False
+        run = await (run_of(self.db, archive_id, run_id) if run_id is not None else newest_run(self.db, archive_id))
+        if run_id is not None and run is None:
+            logger.info("Run %s of archive %s is gone; not attaching its timelapse", run_id, archive_id)
+            return False
         # Created only once the name has been vetted, so a rejected filename
         # leaves nothing behind. A no-3MF archive has never had a directory of
         # its own, and the timelapse can be the first thing to want one.
@@ -1952,14 +1964,17 @@ class ArchiveService:
         # (#3275). Writing over it would destroy the copy that was kept: the
         # external-camera stitch always names its output layer_timelapse.mp4.
         # Re-attaching the file the archive does point at still replaces it.
-        timelapse_file = await asyncio.to_thread(
-            _free_timelapse_name, timelapse_file, archive.timelapse_path, settings.base_dir
-        )
+        # A run's video is replaced only by that run's.
+        current = run.timelapse_path if run_id is not None and run is not None else archive.timelapse_path
+        timelapse_file = await asyncio.to_thread(_free_timelapse_name, timelapse_file, current, settings.base_dir)
         await asyncio.to_thread(timelapse_file.write_bytes, timelapse_data)
 
-        # Update archive record
-        archive.timelapse_path = str(timelapse_file.relative_to(settings.base_dir))
-        archive.timelapse_plate_id = plate_id
+        relpath = str(timelapse_file.relative_to(settings.base_dir))
+        if run is not None:
+            run.timelapse_path = relpath
+        if run_id is None or (run is not None and await is_newest_run(self.db, run)):
+            archive.timelapse_path = relpath
+            archive.timelapse_plate_id = plate_id
         await self.db.commit()
         await _announce_timelapse(archive_id, attached=True)
 
@@ -2084,19 +2099,26 @@ async def _convert_timelapse_to_mp4(archive_id: int, source_path: Path) -> None:
         # Update DB path to the new MP4 file
         async with async_session() as db:
             from backend.app.models.archive import PrintArchive
+            from backend.app.services.print_log import runs_with_timelapse
 
             result = await db.execute(select(PrintArchive).where(PrintArchive.id == archive_id))
             archive = result.scalar_one_or_none()
             source_rel = str(source_path.relative_to(settings.base_dir))
-            # Only if the archive still shows this video: one deleted while it
-            # converted, or replaced by a reprint's, must not come back.
-            if archive is None or archive.timelapse_path != source_rel:
+            runs = await runs_with_timelapse(db, archive_id, source_rel) if archive is not None else []
+            # Only if the archive or one of its runs still shows this video:
+            # one deleted while it converted, or replaced by a reprint's, must
+            # not come back.
+            if archive is None or (archive.timelapse_path != source_rel and not runs):
                 logger.info(
                     "Archive %s no longer shows %s; discarding its MP4 conversion", archive_id, source_path.name
                 )
                 mp4_path.unlink(missing_ok=True)
                 return
-            archive.timelapse_path = str(mp4_path.relative_to(settings.base_dir))
+            mp4_rel = str(mp4_path.relative_to(settings.base_dir))
+            if archive.timelapse_path == source_rel:
+                archive.timelapse_path = mp4_rel
+            for run in runs:
+                run.timelapse_path = mp4_rel
             await db.commit()
         await _announce_timelapse(archive_id, attached=True)
 

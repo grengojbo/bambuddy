@@ -32,7 +32,7 @@ from backend.app.core.permissions import Permission
 from backend.app.core.printer_scope import PrinterScope
 from backend.app.models.archive import PrintArchive
 from backend.app.models.filament import Filament
-from backend.app.models.print_log import PrintLogEntry
+from backend.app.models.print_log import INCLUDE_OPEN_RUNS, PrintLogEntry
 from backend.app.models.printer import Printer
 from backend.app.models.project import Project
 from backend.app.models.spool_usage_history import SpoolUsageHistory
@@ -49,6 +49,7 @@ from backend.app.services.print_confirmation import (
     is_unattended_fetch,
 )
 from backend.app.services.print_cost_estimate import default_cost_per_kg as _default_cost_per_kg, price_one_print
+from backend.app.services.print_log import owns_media, runs_with_timelapse
 from backend.app.services.print_storage import (
     REASON_FTP_TRANSFER_FAILED,
     REASON_FTPS_COOLOFF,
@@ -157,25 +158,15 @@ def _match_timelapse_by_timestamp(
 
 
 async def _claimed_timelapse_stems(db, printer_id: int | None, exclude_archive_id: int) -> set[str]:
-    """Video filenames already attached to another archive of this printer (#2704).
+    """Video filenames already attached to another print of this printer
+    (#2704): ``print_log.claimed_timelapse_stems``, for the print the archive
+    shows, its newest run."""
+    from backend.app.services.print_log import claimed_timelapse_stems, newest_run
 
-    Lets the baseline diff drop a previous print's late-landing video from the
-    candidate list without ordering the candidates — ordering could only be done
-    on mtime or the filename timestamp, and both come from a clock the printer
-    can't sync in LAN-only mode. ``attach_timelapse`` stores the video under the
-    printer's own filename and the MP4 conversion keeps the stem, so the stem of
-    ``timelapse_path`` is what was claimed.
-    """
-    if printer_id is None:
-        return set()
-    rows = await db.execute(
-        select(PrintArchive.timelapse_path).where(
-            PrintArchive.printer_id == printer_id,
-            PrintArchive.id != exclude_archive_id,
-            PrintArchive.timelapse_path.is_not(None),
-        )
+    run = await newest_run(db, exclude_archive_id)
+    return await claimed_timelapse_stems(
+        db, printer_id, archive_id=exclude_archive_id, run_id=run.id if run is not None else None
     )
-    return {Path(p).stem for p in rows.scalars().all() if p}
 
 
 def _visible_archive_clauses(user, can_read_all: bool, printer_scope: PrinterScope) -> list:
@@ -366,6 +357,12 @@ def _with_run_outcome(data: dict, run: PrintLogEntry) -> dict:
             else data["confirm_requested"],
         }
     )
+    # Its own video and finish photos, once it keeps them; one logged before
+    # shares the archive's.
+    if owns_media(run):
+        data["timelapse_path"] = run.timelapse_path
+    if run.photos is not None:
+        data["photos"] = run.photos or None
     return data
 
 
@@ -616,8 +613,6 @@ async def list_last_archive_per_printer(
     ran once per printer on every page load.
     """
     from sqlalchemy.orm import selectinload
-
-    from backend.app.models.print_log import INCLUDE_OPEN_RUNS
 
     user, can_read_all = auth_result
     filters: list[ColumnElement[bool]] = [PrintArchive.deleted_at.is_(None)]
@@ -2995,7 +2990,9 @@ async def delete_timelapse(
     if timelapse_path.exists():
         timelapse_path.unlink()
 
-    # Clear the path in database
+    # Clear the path in database, on the runs that held it too
+    for run in await runs_with_timelapse(db, archive.id, archive.timelapse_path):
+        run.timelapse_path = None
     archive.timelapse_path = None
     archive.timelapse_plate_id = None
     await db.commit()
@@ -3830,9 +3827,13 @@ async def delete_photo(
     if photo_path is not None:
         photo_path.unlink()
 
-    # Update archive photos list
+    # Update archive photos list, and the list of the run it was taken for
     photos = [p for p in archive.photos if p != filename]
     archive.photos = photos if photos else None
+    runs = select(PrintLogEntry).where(PrintLogEntry.archive_id == archive.id)
+    for run in await db.scalars(runs.execution_options(**{INCLUDE_OPEN_RUNS: True})):
+        if run.photos and filename in run.photos:
+            run.photos = [p for p in run.photos if p != filename]
 
     await db.commit()
 
