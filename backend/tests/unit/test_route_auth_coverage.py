@@ -133,6 +133,7 @@ _PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
         # ---- Static / SPA routes (not user data) ----
         ("GET", "/"),
         ("GET", "/manifest.json"),
+        ("GET", "/manifest-spoolbuddy.json"),
         ("GET", "/sw-register.js"),
         ("GET", "/sw.js"),
         # SPA catch-all — serves index.html for client-side routing. No backend data path.

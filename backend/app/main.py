@@ -10763,6 +10763,15 @@ async def serve_manifest():
     return {"error": "Manifest not found"}
 
 
+@app.api_route("/manifest-spoolbuddy.json", methods=["GET", "HEAD"])
+async def serve_spoolbuddy_manifest():
+    """Serve the SpoolBuddy PWA manifest (installs /spoolbuddy as its own app)."""
+    manifest_file = app_settings.static_dir / "manifest-spoolbuddy.json"
+    if manifest_file.exists():
+        return FileResponse(manifest_file, media_type="application/manifest+json")
+    return {"error": "Manifest not found"}
+
+
 @app.api_route("/sw.js", methods=["GET", "HEAD"])
 async def serve_service_worker():
     """Serve service worker."""
