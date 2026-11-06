@@ -399,7 +399,7 @@ async def test_pdf_worker_asset_csp_allows_wasm_without_eval(async_client: Async
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.parametrize("path", ["/manifest.json", "/sw.js", "/sw-register.js"])
+@pytest.mark.parametrize("path", ["/manifest.json", "/manifest-spoolbuddy.json", "/sw.js", "/sw-register.js"])
 async def test_pwa_bootstrap_routes_accept_head(async_client: AsyncClient, path: str):
     """Scanners and `curl -I` HEAD-probe these — must not 405 (#1460).
 

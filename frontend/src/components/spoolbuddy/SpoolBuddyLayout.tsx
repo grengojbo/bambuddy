@@ -8,6 +8,7 @@ import { SpoolBuddyStatusBar } from './SpoolBuddyStatusBar';
 import { SpoolBuddyQuickMenu } from './SpoolBuddyQuickMenu';
 import { useSpoolBuddyState } from '../../hooks/useSpoolBuddyState';
 import { useColorCatalogVersion } from '../../hooks/useColorCatalogVersion';
+import { useSpoolBuddyManifest } from '../../hooks/useSpoolBuddyManifest';
 import { api, spoolbuddyApi, type Printer, type PrinterStatus } from '../../api/client';
 import { VirtualKeyboard } from '../VirtualKeyboard';
 import { useToast } from '../../contexts/ToastContext';
@@ -17,6 +18,7 @@ export function SpoolBuddyLayout() {
   // loads, for the same reason as the main Layout — SpoolBuddyInventoryPage
   // renders spool color names on mount. See #857.
   useColorCatalogVersion();
+  useSpoolBuddyManifest();
   const [selectedPrinterId, setSelectedPrinterId] = useState<number | null>(null);
   const [alert, setAlert] = useState<{ type: 'warning' | 'error' | 'info'; message: string } | null>(null);
   const [displayBrightness, setDisplayBrightness] = useState(100);
