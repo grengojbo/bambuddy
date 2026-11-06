@@ -16,6 +16,8 @@ BAMBU_BLOCK_DUMP = {
     2: bytes.fromhex("504C4100000000000000000000000000"),  # "PLA"
     4: bytes.fromhex("504C4120426173696300000000000000"),  # "PLA Basic"
     5: bytes.fromhex("FFFFFFFFE80300000000E03F00000000"),  # white, 1000 g, 1.75 mm
+    # Not from the captured tag: drying 55 °C / 8 h, bed 35 °C, nozzle 190-230 °C
+    6: bytes.fromhex("37000800010023000000E600BE000000"),
     9: bytes.fromhex("6B9170BB5BD84DDBA748713C159367DF"),  # tray UID
 }
 BAMBU_TRAY_UUID = "6B9170BB5BD84DDBA748713C159367DF"

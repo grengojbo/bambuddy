@@ -38,8 +38,9 @@ BAMBU_CONTEXT = b"RFID-A\x00"  # 7 bytes including null terminator
 #   2 — filament type                       ("PLA")
 #   4 — detailed filament type              ("PLA Basic")
 #   5 — colour RGBA, spool weight, diameter
+#   6 — drying and nozzle temperatures (sent on in raw_blocks, #2685)
 #   9 — tray UID, the tag's unique identifier
-BAMBU_BLOCKS = [1, 2, 4, 5, 9]
+BAMBU_BLOCKS = [1, 2, 4, 5, 6, 9]
 
 # Block holding the 16-byte tray UID that identifies an individual spool
 TRAY_UUID_BLOCK = 9
