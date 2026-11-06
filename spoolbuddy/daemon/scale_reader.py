@@ -42,19 +42,34 @@ class ScaleReader:
 
         if driver is None:
             driver = os.environ.get("SPOOLBUDDY_SCALE_DRIVER", "nau7802").strip().lower() or "nau7802"
+        self._driver = driver
 
         try:
-            self._scale = _open_driver(driver)
-            self._scale.init()
-            self._ok = True
-            logger.info(
-                "Scale initialized: %s (tare=%d, cal=%.6f)",
-                _describe(self._scale),
-                tare_offset,
-                calibration_factor,
-            )
+            self._open()
         except Exception as e:
             logger.info("Scale not available (driver=%s): %s", driver, e)
+
+    def _open(self):
+        self._scale = _open_driver(self._driver)
+        self._scale.init()
+        self._ok = True
+        logger.info(
+            "Scale initialized: %s (tare=%d, cal=%.6f)",
+            _describe(self._scale),
+            self._tare_offset,
+            self._calibration_factor,
+        )
+
+    def reinit(self) -> bool:
+        """Retry bringing up a scale that failed to initialise. Returns ok."""
+        self.close()
+        self._scale = None
+        self._ok = False
+        try:
+            self._open()
+        except Exception as e:
+            logger.debug("Scale still not available (driver=%s): %s", self._driver, e)
+        return self._ok
 
     @property
     def ok(self) -> bool:
