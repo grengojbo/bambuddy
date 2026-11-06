@@ -25,6 +25,15 @@ logging.basicConfig(
 logger = logging.getLogger("spoolbuddy")
 logging.getLogger("daemon.pn5180").setLevel(logging.DEBUG)
 
+# Backoff for a scale that was not ready at boot (e.g. HX711 still settling).
+SCALE_RETRY_MIN_S = 5.0
+SCALE_RETRY_MAX_S = 60.0
+
+
+def _scale_diag_script(driver: str | None) -> str:
+    """Diagnostic script matching the configured load cell ADC."""
+    return "hx711_diag.py" if driver == "hx711" else "scale_diag.py"
+
 
 def _spoolbuddy_env_path() -> Path:
     # installer writes this at <install>/spoolbuddy/.env; allow override for custom setups/tests
@@ -182,9 +191,17 @@ async def scale_poll_loop(config: Config, api: APIClient, shared: dict):
     """Continuous scale reading loop — reads at 100ms, reports at 1s intervals."""
     scale: ScaleReader = shared["scale"]
     display: DisplayControl = shared["display"]
+    # Held by the scale diagnostic so its subprocess owns the ADC lines alone.
+    scale_lock: asyncio.Lock = shared.setdefault("scale_lock", asyncio.Lock())
     if not scale.ok:
-        logger.warning("Scale not available, skipping scale polling")
-        return
+        delay = SCALE_RETRY_MIN_S
+        logger.warning("Scale not available, retrying every %.0f-%.0fs", SCALE_RETRY_MIN_S, SCALE_RETRY_MAX_S)
+        while True:
+            await asyncio.sleep(delay)
+            async with scale_lock:
+                if await asyncio.to_thread(scale.reinit):
+                    break
+            delay = min(delay * 2, SCALE_RETRY_MAX_S)
 
     last_report = 0.0
     last_reported_grams: float | None = None
@@ -193,7 +210,8 @@ async def scale_poll_loop(config: Config, api: APIClient, shared: dict):
     WAKE_THRESHOLD = 50.0  # Only wake display on large changes (spool placed/removed, not sensor bounce)
     try:
         while True:
-            result = await asyncio.to_thread(scale.read)
+            async with scale_lock:
+                result = await asyncio.to_thread(scale.read)
 
             if result is not None:
                 grams, stable, raw_adc = result
@@ -317,7 +335,7 @@ async def heartbeat_loop(config: Config, api: APIClient, start_time: float, shar
             elif cmd in ("run_nfc_diag", "run_scale_diag", "run_read_tag_diag"):
                 if cmd == "run_scale_diag":
                     diagnostic = "scale"
-                    script_name = "scale_diag.py"
+                    script_name = _scale_diag_script(config.scale_driver)
                 elif cmd == "run_read_tag_diag":
                     diagnostic = "read_tag"
                     script_name = "read_tag.py"
@@ -333,6 +351,11 @@ async def heartbeat_loop(config: Config, api: APIClient, start_time: float, shar
                     if nfc_for_diag:
                         await asyncio.to_thread(nfc_for_diag.close)
                         shared["nfc"] = None
+
+                scale_lock = None
+                if diagnostic == "scale":
+                    scale_lock = shared.setdefault("scale_lock", asyncio.Lock())
+                    await scale_lock.acquire()
 
                 logger.info("Running %s diagnostic via %s", diagnostic, script_path)
                 try:
@@ -368,6 +391,8 @@ async def heartbeat_loop(config: Config, api: APIClient, start_time: float, shar
                         -1,
                     )
                 finally:
+                    if scale_lock is not None:
+                        scale_lock.release()
                     if diagnostic in ("nfc", "read_tag"):
                         logger.info("Reinitializing NFC continuous scan after diagnostic")
                         shared["nfc"] = NFCReader()
