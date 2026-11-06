@@ -7718,6 +7718,7 @@ export default {
       incompleteDataWarning: 'Etiqueta escrita con datos de Spoolman incompletos',
     },
     quickMenu: {
+      open: 'Abrir menú',
       printerPower: 'Alimentación de la impresora',
       systemControls: 'Sistema',
       restartDaemon: 'Reiniciar demonio',

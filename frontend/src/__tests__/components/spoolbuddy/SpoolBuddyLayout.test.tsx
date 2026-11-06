@@ -43,6 +43,7 @@ vi.mock('lucide-react', () => {
   const Stub = (props: Record<string, unknown>) => <span {...props} />;
   return {
     WifiOff: (props: Record<string, unknown>) => <span data-testid="wifi-off" {...props} />,
+    Menu: Stub,
     // ToastProvider, brought in by SpoolBuddyLayout's useToast(), imports these.
     AlertCircle: Stub,
     CheckCircle: Stub,
@@ -117,6 +118,14 @@ describe('SpoolBuddyLayout', () => {
     renderLayout();
     const img = document.querySelector('img[alt="SpoolBuddy"]');
     expect(img).not.toBeNull();
+  });
+
+  it('opens the quick menu from the top bar button', () => {
+    renderLayout();
+    // One finger-sized button replaces the old 6px pull-down strip.
+    const buttons = screen.getAllByRole('button', { name: 'Open menu' });
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].className).toContain('h-11');
   });
 
   it('renders the bottom nav', () => {

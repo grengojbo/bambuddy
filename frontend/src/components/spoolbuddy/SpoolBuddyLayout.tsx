@@ -232,19 +232,11 @@ export function SpoolBuddyLayout() {
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        {/* Pull-down handle — tap or swipe to open quick menu */}
-        <button
-          onClick={() => setQuickMenuOpen(true)}
-          className="w-full h-1.5 bg-bambu-dark-secondary flex justify-center items-center shrink-0 touch-none"
-          aria-label="Open quick menu"
-        >
-          <div className="w-8 h-0.5 rounded-full bg-zinc-600" />
-        </button>
-
         <SpoolBuddyTopBar
           selectedPrinterId={selectedPrinterId}
           onPrinterChange={setSelectedPrinterId}
           deviceOnline={effectiveDeviceOnline}
+          onOpenMenu={() => setQuickMenuOpen(true)}
         />
 
         <main className="flex-1 overflow-y-auto">

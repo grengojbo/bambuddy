@@ -7353,6 +7353,7 @@ export default {
       incompleteDataWarning: '불완전한 Spoolman 데이터로 태그 쓰여짐'
     },
     quickMenu: {
+      open: '메뉴 열기',
       printerPower: '프린터 전원',
       systemControls: '시스템',
       restartDaemon: '데몬 재시작',

@@ -7759,6 +7759,7 @@ errors: {
       incompleteDataWarning: 'Tagg skriven med ofullständig Spoolman-data',
     },
     quickMenu: {
+      open: 'Öppna meny',
       printerPower: 'Skrivarström',
       systemControls: 'System',
       restartDaemon: 'Starta om demon',

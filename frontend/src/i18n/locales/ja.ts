@@ -7711,6 +7711,7 @@ export default {
       incompleteDataWarning: '不完全なSpoolmanデータでタグを書き込みました',
     },
     quickMenu: {
+      open: 'メニューを開く',
       printerPower: 'プリンター電源',
       systemControls: 'システム',
       restartDaemon: 'デーモン再起動',

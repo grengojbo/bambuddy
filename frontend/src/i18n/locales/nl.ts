@@ -7761,6 +7761,7 @@ export default {
       incompleteDataWarning: 'Tag geschreven met onvolledige Spoolman-gegevens',
     },
     quickMenu: {
+      open: 'Menu openen',
       printerPower: 'Printervoeding',
       systemControls: 'Systeem',
       restartDaemon: 'Daemon herstarten',

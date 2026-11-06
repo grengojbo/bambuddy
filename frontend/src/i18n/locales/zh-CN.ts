@@ -7695,6 +7695,7 @@ export default {
       incompleteDataWarning: '已使用不完整的Spoolman数据写入标签',
     },
     quickMenu: {
+      open: '打开菜单',
       printerPower: '打印机电源',
       systemControls: '系统',
       restartDaemon: '重启守护进程',

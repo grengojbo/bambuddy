@@ -7649,6 +7649,7 @@ export default {
       incompleteDataWarning: 'Etiket eksik Spoolman verisiyle yazıldı',
     },
     quickMenu: {
+      open: 'Menüyü aç',
       printerPower: 'Yazıcı Gücü',
       systemControls: 'Sistem',
       restartDaemon: 'Daemon\'u Yeniden Başlat',

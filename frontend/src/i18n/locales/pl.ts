@@ -7763,6 +7763,7 @@ export default {
       incompleteDataWarning: 'Tag zapisany z niekompletnymi danymi Spoolman',
     },
     quickMenu: {
+      open: 'Otwórz menu',
       printerPower: 'Zasilanie drukarki',
       systemControls: 'System',
       restartDaemon: 'Uruchom ponownie demona',

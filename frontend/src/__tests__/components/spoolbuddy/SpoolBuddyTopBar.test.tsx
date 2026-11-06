@@ -3,10 +3,11 @@
  * - Renders the logo image
  * - Renders the printer selector
  * - Shows backend status indicator
+ * - Renders a touch-sized quick-menu button when onOpenMenu is set
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SpoolBuddyTopBar } from '../../../components/spoolbuddy/SpoolBuddyTopBar';
@@ -38,9 +39,10 @@ vi.mock('../../../utils/date', () => ({
 
 vi.mock('lucide-react', () => ({
   WifiOff: (props: Record<string, unknown>) => <span data-testid="wifi-off" {...props} />,
+  Menu: (props: Record<string, unknown>) => <span data-testid="menu-icon" {...props} />,
 }));
 
-function renderTopBar(deviceOnline = false) {
+function renderTopBar(deviceOnline = false, onOpenMenu?: () => void) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return render(
     <QueryClientProvider client={qc}>
@@ -48,6 +50,7 @@ function renderTopBar(deviceOnline = false) {
         selectedPrinterId={null}
         onPrinterChange={vi.fn()}
         deviceOnline={deviceOnline}
+        onOpenMenu={onOpenMenu}
       />
     </QueryClientProvider>
   );
@@ -82,5 +85,21 @@ describe('SpoolBuddyTopBar', () => {
   it('shows clock time', () => {
     renderTopBar();
     expect(screen.getByText('12:00')).toBeDefined();
+  });
+
+  it('has no menu button without onOpenMenu', () => {
+    renderTopBar();
+    expect(screen.queryByRole('button', { name: 'Open menu' })).toBeNull();
+  });
+
+  it('opens the quick menu from the menu button', () => {
+    const onOpenMenu = vi.fn();
+    renderTopBar(false, onOpenMenu);
+    const button = screen.getByRole('button', { name: 'Open menu' });
+    // Large enough to hit with a finger on a tablet (44px, Tailwind h-11 w-11).
+    expect(button.className).toContain('h-11');
+    expect(button.className).toContain('w-11');
+    fireEvent.click(button);
+    expect(onOpenMenu).toHaveBeenCalledTimes(1);
   });
 });

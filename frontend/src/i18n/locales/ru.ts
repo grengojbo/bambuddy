@@ -7341,6 +7341,7 @@ export default {
       incompleteDataWarning: "Метка записана с неполными данными Spoolman",
     },
     quickMenu: {
+      open: 'Открыть меню',
       printerPower: "Питание принтера",
       systemControls: "Система",
       restartDaemon: "Перезапустить демон",
