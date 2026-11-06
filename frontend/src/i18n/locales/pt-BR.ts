@@ -7697,6 +7697,7 @@ export default {
       incompleteDataWarning: 'Tag gravada com dados Spoolman incompletos',
     },
     quickMenu: {
+      open: 'Abrir menu',
       printerPower: 'Energia da impressora',
       systemControls: 'Sistema',
       restartDaemon: 'Reiniciar daemon',

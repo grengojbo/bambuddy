@@ -7751,6 +7751,7 @@ export default {
       incompleteDataWarning: "Тег записано з неповними даними Spoolman.",
     },
     quickMenu: {
+      open: 'Відкрити меню',
       printerPower: "Живлення принтера",
       systemControls: "система",
       restartDaemon: "Перезапустити демон",

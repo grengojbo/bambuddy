@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { WifiOff } from 'lucide-react';
+import { Menu, WifiOff } from 'lucide-react';
 import { api, type Printer } from '../../api/client';
 import { formatTimeOnly } from '../../utils/date';
 import { useUiSettings } from '../../hooks/useUiSettings';
@@ -10,9 +10,11 @@ interface SpoolBuddyTopBarProps {
   selectedPrinterId: number | null;
   onPrinterChange: (id: number) => void;
   deviceOnline: boolean;
+  /** Opens the quick menu; renders a touch-sized menu button when set. */
+  onOpenMenu?: () => void;
 }
 
-export function SpoolBuddyTopBar({ selectedPrinterId, onPrinterChange, deviceOnline }: SpoolBuddyTopBarProps) {
+export function SpoolBuddyTopBar({ selectedPrinterId, onPrinterChange, deviceOnline, onOpenMenu }: SpoolBuddyTopBarProps) {
   const { t } = useTranslation();
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -105,6 +107,17 @@ export function SpoolBuddyTopBar({ selectedPrinterId, onPrinterChange, deviceOnl
         <span className="text-white/50 text-base font-mono min-w-[50px] text-right">
           {formatTimeOnly(currentTime, settings?.time_format || 'system')}
         </span>
+
+        {onOpenMenu && (
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            className="h-11 w-11 -mr-2 flex items-center justify-center rounded text-white/70 hover:bg-bambu-dark-tertiary active:bg-bambu-dark-tertiary"
+            aria-label={t('spoolbuddy.quickMenu.open', 'Open menu')}
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+        )}
       </div>
     </div>
   );

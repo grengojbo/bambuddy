@@ -7763,6 +7763,7 @@ export default {
       incompleteDataWarning: 'Tag written with incomplete Spoolman data',
     },
     quickMenu: {
+      open: 'Open menu',
       printerPower: 'Printer Power',
       systemControls: 'System',
       restartDaemon: 'Restart Daemon',

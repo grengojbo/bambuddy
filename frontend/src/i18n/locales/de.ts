@@ -7710,6 +7710,7 @@ export default {
       incompleteDataWarning: 'Tag mit unvollständigen Spoolman-Daten geschrieben',
     },
     quickMenu: {
+      open: 'Menü öffnen',
       printerPower: 'Drucker-Strom',
       systemControls: 'System',
       restartDaemon: 'Daemon neustarten',

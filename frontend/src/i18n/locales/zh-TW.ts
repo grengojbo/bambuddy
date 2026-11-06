@@ -7695,6 +7695,7 @@ export default {
       incompleteDataWarning: '已使用不完整的Spoolman資料寫入標籤',
     },
     quickMenu: {
+      open: '開啟選單',
       printerPower: '印表機電源',
       systemControls: '系統',
       restartDaemon: '重新啟動守護程式',

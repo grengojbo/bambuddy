@@ -7697,6 +7697,7 @@ export default {
       incompleteDataWarning: 'Tag scritto con dati Spoolman incompleti',
     },
     quickMenu: {
+      open: 'Apri menu',
       printerPower: 'Alimentazione stampante',
       systemControls: 'Sistema',
       restartDaemon: 'Riavvia daemon',
