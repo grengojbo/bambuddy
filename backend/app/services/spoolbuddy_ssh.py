@@ -27,6 +27,9 @@ from backend.app.core.config import settings
 logger = logging.getLogger(__name__)
 
 PIP_INSTALL_TIMEOUT = 300
+# A Pi Model B+ (single core, 512 MB) needs minutes to fetch a large upstream
+# merge into a ~1.3 GB repository; two minutes was not enough.
+GIT_FETCH_TIMEOUT = 600
 
 SSH_USER = "spoolbuddy"
 DEFAULT_INSTALL_PATH = "/opt/bambuddy"
@@ -287,11 +290,22 @@ async def perform_ssh_update(device_id: str, ip_address: str, install_path: str 
         await _update_progress("updating", f"Fetching latest code (branch: {branch})...")
         rc, _, stderr, _ = await _run_ssh_command(
             ip_address,
-            f"cd {safe_path} && git -c safe.directory={safe_path} fetch origin {safe_branch}",
+            # --depth=1: only the tip is needed for `reset --hard`; skipping the
+            # history keeps the pack small enough for a weak Pi.
+            f"cd {safe_path} && git -c safe.directory={safe_path} fetch --depth=1 origin {safe_branch}",
             private_key,
             known_hosts=known_hosts,
-            timeout=120,
+            timeout=GIT_FETCH_TIMEOUT,
         )
+        if rc == -1:
+            # Only the SSH session gave up: git keeps running on the device and
+            # usually finishes, after which a retry is quick.
+            await _update_progress(
+                "error",
+                "Fetching the code timed out; git may still be running on the device. "
+                "Run the update again in a few minutes.",
+            )
+            return
         if rc != 0:
             await _update_progress("error", f"git fetch failed: {stderr[:200]}")
             return

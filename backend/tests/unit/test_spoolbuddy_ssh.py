@@ -719,7 +719,7 @@ async def test_perform_ssh_update_passes_str_not_bytes_to_import_known_hosts(tmp
         assert isinstance(arg, str), f"asyncssh.import_known_hosts must receive str, got {type(arg).__name__}: {arg!r}"
 
 
-async def _update_with_pip_result(tmp_path, pip_result):
+async def _update_with_pip_result(tmp_path, pip_result, *, fetch_result=None):
     ssh_dir = tmp_path / "spoolbuddy" / "ssh"
     ssh_dir.mkdir(parents=True)
     (ssh_dir / "id_ed25519").write_text("PRIVATE")
@@ -730,6 +730,8 @@ async def _update_with_pip_result(tmp_path, pip_result):
         calls.append((cmd, timeout))
         if "pip" in cmd:
             return pip_result
+        if fetch_result is not None and " fetch " in cmd:
+            return fetch_result
         return 0, "ok", "", "ssh-ed25519 AAAA fakehostkey"
 
     _, mock_ctx, mock_ws = _make_update_mocks(tmp_path)
@@ -776,3 +778,24 @@ async def test_pip_gets_time_for_a_slow_pi(tmp_path):
     calls, _ = await _update_with_pip_result(tmp_path, (0, "ok", "", None))
 
     assert next(timeout for cmd, timeout in calls if "pip" in cmd) >= 300
+
+
+@pytest.mark.asyncio
+async def test_fetch_is_shallow_and_gets_time_for_a_slow_pi(tmp_path):
+    """A Pi B+ could not fetch a large upstream merge in two minutes."""
+    calls, _ = await _update_with_pip_result(tmp_path, (0, "ok", "", None))
+
+    cmd, timeout = next((cmd, timeout) for cmd, timeout in calls if " fetch " in cmd)
+    assert "fetch --depth=1 origin dev" in cmd
+    assert timeout >= 600
+
+
+@pytest.mark.asyncio
+async def test_a_fetch_timeout_says_git_may_still_be_running(tmp_path):
+    calls, last = await _update_with_pip_result(
+        tmp_path, (0, "ok", "", None), fetch_result=(-1, "", "SSH command timed out", None)
+    )
+
+    assert last["update_status"] == "error"
+    assert "still be running" in last["update_message"]
+    assert not any("reset --hard" in cmd for cmd, _ in calls)
