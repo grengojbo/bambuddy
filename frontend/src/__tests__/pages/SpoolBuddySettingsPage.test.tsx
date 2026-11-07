@@ -5,6 +5,7 @@
  * - Updates tab shows "Check for Updates" button
  * - System tab shows OS stats
  * - Tab switching works
+ * - The active tab is kept in the URL, so a reload stays on it
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -96,11 +97,11 @@ function OutletWrapper() {
   return <Outlet context={mockOutletContext} />;
 }
 
-function renderPage() {
+function renderPage(path = '/spoolbuddy/settings') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/spoolbuddy/settings']}>
+      <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route element={<OutletWrapper />}>
             <Route path="spoolbuddy/settings" element={<SpoolBuddySettingsPage />} />
@@ -197,6 +198,22 @@ describe('SpoolBuddySettingsPage', () => {
     fireEvent.click(screen.getByText('Updates'));
     await waitFor(() => {
       expect(screen.getByText('Apply Update')).toBeDefined();
+    });
+  });
+
+  it('opens the tab named in the URL', async () => {
+    // An update reloads the page; ?tab=updates keeps the user on that tab.
+    renderPage('/spoolbuddy/settings?tab=updates');
+    await waitFor(() => {
+      expect(screen.getByText('SSH Setup')).toBeDefined();
+    });
+    expect(screen.queryByText('spoolbuddy-pi')).toBeNull();
+  });
+
+  it('falls back to the Device tab for an unknown tab in the URL', async () => {
+    renderPage('/spoolbuddy/settings?tab=bogus');
+    await waitFor(() => {
+      expect(screen.getByText('spoolbuddy-pi')).toBeDefined();
     });
   });
 

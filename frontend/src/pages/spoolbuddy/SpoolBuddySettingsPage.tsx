@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { SpoolBuddyOutletContext } from '../../components/spoolbuddy/SpoolBuddyLayout';
 import { spoolbuddyApi, type SpoolBuddyDevice } from '../../api/client';
@@ -1051,12 +1051,25 @@ function SystemTab({ device }: { device: SpoolBuddyDevice }) {
 
 // --- Main Settings Page ---
 
-type SettingsTab = 'device' | 'display' | 'scale' | 'updates' | 'system';
+const SETTINGS_TABS = ['device', 'display', 'scale', 'updates', 'system'] as const;
+type SettingsTab = (typeof SETTINGS_TABS)[number];
+
+function isSettingsTab(value: string | null): value is SettingsTab {
+  return (SETTINGS_TABS as readonly string[]).includes(value ?? '');
+}
 
 export function SpoolBuddySettingsPage() {
   const { sbState, setDisplayBrightness } = useOutletContext<SpoolBuddyOutletContext>();
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('device');
+  // The tab lives in the URL (?tab=updates): an update reloads the page when
+  // the daemon comes back, and that used to drop the user on the Device tab.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const activeTab: SettingsTab = isSettingsTab(tabParam) ? tabParam : 'device';
+  const setActiveTab = useCallback(
+    (tab: SettingsTab) => setSearchParams({ tab }, { replace: true }),
+    [setSearchParams],
+  );
 
   const { data: devices = [] } = useQuery({
     queryKey: ['spoolbuddy-devices'],
