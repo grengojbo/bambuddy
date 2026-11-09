@@ -26,7 +26,10 @@ from backend.app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-PIP_INSTALL_TIMEOUT = 300
+# A Pi Model B+ (armv6) has no prebuilt wheel for a fresh gpiod release, so
+# pip compiles it: 3.5 minutes even with the sources cached, more on a first
+# download. Five minutes was not enough.
+PIP_INSTALL_TIMEOUT = 900
 # A Pi Model B+ (single core, 512 MB) needs minutes to fetch a large upstream
 # merge into a ~1.3 GB repository; two minutes was not enough.
 GIT_FETCH_TIMEOUT = 600

@@ -777,7 +777,8 @@ async def test_a_failed_pip_install_completes_but_says_so(tmp_path):
 async def test_pip_gets_time_for_a_slow_pi(tmp_path):
     calls, _ = await _update_with_pip_result(tmp_path, (0, "ok", "", None))
 
-    assert next(timeout for cmd, timeout in calls if "pip" in cmd) >= 300
+    # gpiod builds from source on an armv6 Pi B+: over five minutes on a first run.
+    assert next(timeout for cmd, timeout in calls if "pip" in cmd) >= 900
 
 
 @pytest.mark.asyncio
