@@ -49,7 +49,8 @@ ensure_merge_ours
 CURRENT="$(git rev-parse --abbrev-ref HEAD)"
 
 echo "==> Fetching upstream"
-git fetch upstream --tags --prune
+# --force: upstream occasionally re-points a tag; without it the fetch fails.
+git fetch upstream --tags --prune --force
 
 OLD_MAIN="$(git rev-parse --verify --quiet main || true)"
 
@@ -67,7 +68,9 @@ done
 
 echo "==> Pushing mirrors and tags to origin"
 git push origin main dev
-git push origin --tags
+# A tag upstream re-pointed is refused here without --force; the nightly
+# workflow force-mirrors it with GITHUB_TOKEN, which triggers no workflows.
+git push origin --tags || echo "!! Some tags were refused (re-pointed upstream?) — the nightly Sync upstream mirrors them" >&2
 
 # The 'ours' driver keeps our compose file without asking, which also means a
 # real upstream improvement to it (a new env var, a port fix) arrives silently

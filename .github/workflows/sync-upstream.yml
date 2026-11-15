@@ -73,5 +73,10 @@ jobs:
         run: |
           set -euo pipefail
           git remote add upstream https://github.com/maziggy/bambuddy.git
-          git fetch upstream --tags --quiet
-          git push origin --tags
+          # --force on both sides: upstream re-points a tag now and then (v1.3.0
+          # moved four commits on 2026-11-07), and a plain fetch refuses to
+          # clobber it, failing the whole job and leaving every later tag
+          # unmirrored. Our own v*-jbo.* tags never exist upstream, so the
+          # forced push leaves them as they are.
+          git fetch upstream --tags --force --quiet
+          git push origin --tags --force
