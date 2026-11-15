@@ -73,8 +73,7 @@ If you sponsor and your name isn't here within 48h, please write an email to mar
 - [@MorganMLGman](https://github.com/MorganMLGman)
 - [@NeighborGeek](https://github.com/NeighborGeek)
 - [@frantiseklorenc](https://github.com/frantiseklorenc)
-- [@adamspicedev](https://github.com/adamspicedev)
-
+- [@jsstone88-oss](https://github.com/jsstone88-oss)
 ---
 
 ## One-time and historical supporters
