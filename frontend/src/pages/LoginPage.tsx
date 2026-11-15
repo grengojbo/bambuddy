@@ -121,14 +121,14 @@ export function LoginPage() {
   // ProtectedRoute when it redirects an unauthed visit) over the sessionStorage
   // stash (used to survive the OIDC provider round-trip, which kills React
   // state). Falls back to `/` and rejects unsafe targets via sanitize.
-  function resolvePostLoginRedirect(): string {
+  function routerStateRedirect(): string | null {
     const fromState = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from;
-    if (fromState?.pathname) {
-      const target = `${fromState.pathname}${fromState.search ?? ''}`;
-      const safe = sanitizeRedirectTarget(target);
-      if (safe) return safe;
-    }
-    return consumePostLoginRedirect() ?? '/';
+    if (!fromState?.pathname) return null;
+    return sanitizeRedirectTarget(`${fromState.pathname}${fromState.search ?? ''}`);
+  }
+
+  function resolvePostLoginRedirect(): string {
+    return routerStateRedirect() ?? consumePostLoginRedirect() ?? '/';
   }
 
   // Credentials step state
@@ -184,11 +184,20 @@ export function LoginPage() {
   // which navigate themselves after loginWithToken. Send to '/' rather than
   // resolvePostLoginRedirect() to avoid consuming the OIDC redirect stash: an
   // already-authed direct visit has no pending redirect to honour.
+  //
+  // The router-state target is honoured, though: a password sign-in sets the
+  // user before its onSuccess navigates, so this guard also runs right after
+  // every login from a page ProtectedRoute bounced. Sending that to '/' threw
+  // away the page the user came from (a /spoolbuddy kiosk landed on the
+  // dashboard after each expired session). Router state is not a stash, so
+  // reading it consumes nothing.
   useEffect(() => {
     if (!loading && user && step === 'credentials') {
-      navigate('/', { replace: true });
+      navigate(routerStateRedirect() ?? '/', { replace: true });
     }
-  }, [loading, user, step, navigate]);
+    // routerStateRedirect reads location.state, listed instead of the function.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, user, step, navigate, location.state]);
 
   const autologinAttemptedRef = useRef(false);
   useEffect(() => {
