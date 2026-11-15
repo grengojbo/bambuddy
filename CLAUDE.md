@@ -22,7 +22,7 @@
 
 **Основне правило: не вигадувати.** Три джерела істини, у порядку пріоритету:
 
-1. **MCP `bambuddy`** — жива конфігурація. Перш ніж описувати стан системи,
+1. **MCP `bambuddy-lan`** — жива конфігурація. Перш ніж описувати стан системи,
    запитати її: `find_printer`, `list_virtual_printers`, `search_tools` →
    `execute_tool`. Не переказувати документацію там, де можна прочитати факт.
 2. **Код у цьому репозиторії** — поведінку бекенду читати з `backend/`, а не з
@@ -172,7 +172,7 @@ git tag v1.2.5.5-jbo.1 && git push origin v1.2.5.5-jbo.1
 Інстанція живе в локальній мережі (private IP), TLS через Cloudflare DNS-01.
 URL і адреси — в нотатці «Мережа і залізо» в Obsidian.
 
-Доступ із сесії: MCP-сервер `bambuddy` у **proxy mode** — 4 мета-інструменти
+Доступ із сесії: MCP-сервер `bambuddy-lan` у **proxy mode** — 4 мета-інструменти
 (`list_categories`, `search_tools`, `execute_tool`, `find_printer`) поверх ~731
 ендпоінта. Типовий ланцюжок: `find_printer` → `printer_id` → `search_tools` →
 `execute_tool`.
@@ -280,8 +280,14 @@ HX711 працює тільки через mmap `/dev/gpiomem`; kiosk-режим
 | Bambuddy: принтери, VP, черга, інвентар | Home (чат) **і** Code |
 | Printago, файли, скрипти, слайсинг-пайплайни | **тільки Code** |
 
-`bambuddy` MCP доданий зі `--scope user` — доступний у будь-якому каталозі й на
-обох поверхнях. Скіл `printago` працює через CLI, тож потребує bash.
+Bambuddy MCP доданий зі `--scope user` у `~/.claude.json` під ім'ям
+`bambuddy-lan` — доступний у будь-якому каталозі; інструменти
+`mcp__bambuddy-lan__*`. У Claude Desktop (`claude_desktop_config.json`) він
+зветься `bambuddy`. Імена навмисно різні: перемикачі інструментів застосунку
+(`mcp-user-tool-toggles.json`) ключуються як `<сервер>:<інструмент>` і
+синхронізуються з акаунтом, тож вимкнення в Desktop блокувало однойменний
+сервер у Code помилкою «disabled in your connector settings». Скіл `printago`
+працює через CLI, тож потребує bash.
 
 Корисні MCP-інструменти поза мета-чотіркою (через `execute_tool`):
 `list_virtual_printers`, `get_virtual_printer`, `diagnose_virtual_printer`,
