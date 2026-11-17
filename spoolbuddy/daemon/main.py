@@ -35,6 +35,19 @@ def _scale_diag_script(driver: str | None) -> str:
     return "hx711_diag.py" if driver == "hx711" else "scale_diag.py"
 
 
+def _nfc_diag_script(driver: str | None, diagnostic: str) -> str:
+    """Diagnostic script matching the configured NFC reader.
+
+    The PN5180 scripts drive GPIO24/25 as RST/BUSY; on an MFRC522 board GPIO25
+    is the reader's RST, so running them left the reader dead until a restart.
+    mfrc522_diag.py both checks the chip and reads a tag, so it serves both
+    the NFC and the read-tag diagnostic.
+    """
+    if driver == "mfrc522":
+        return "mfrc522_diag.py"
+    return "read_tag.py" if diagnostic == "read_tag" else "pn5180_diag.py"
+
+
 def _spoolbuddy_env_path() -> Path:
     # installer writes this at <install>/spoolbuddy/.env; allow override for custom setups/tests
     override = os.environ.get("SPOOLBUDDY_ENV_FILE", "").strip()
@@ -383,10 +396,10 @@ async def heartbeat_loop(config: Config, api: APIClient, start_time: float, shar
                     script_name = _scale_diag_script(config.scale_driver)
                 elif cmd == "run_read_tag_diag":
                     diagnostic = "read_tag"
-                    script_name = "read_tag.py"
+                    script_name = _nfc_diag_script(config.nfc_driver, diagnostic)
                 else:
                     diagnostic = "nfc"
-                    script_name = "pn5180_diag.py"
+                    script_name = _nfc_diag_script(config.nfc_driver, diagnostic)
                 script_path = Path(__file__).resolve().parent.parent / "scripts" / script_name
 
                 if diagnostic in ("nfc", "read_tag"):
