@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from daemon import main as daemon_main, scale_reader
 from daemon.config import Config
-from daemon.main import _scale_diag_script, scale_poll_loop
+from daemon.main import _nfc_diag_script, _scale_diag_script, scale_poll_loop
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 
@@ -162,3 +162,20 @@ class TestScaleDiagnosticScript:
     @pytest.mark.parametrize("driver", ["hx711", "nau7802"])
     def test_selected_script_exists(self, driver):
         assert (SCRIPTS_DIR / _scale_diag_script(driver)).is_file()
+
+
+class TestNfcDiagScript:
+    @pytest.mark.parametrize("diagnostic", ["nfc", "read_tag"])
+    def test_mfrc522_runs_the_mfrc522_diagnostic(self, diagnostic):
+        # The PN5180 scripts hold the MFRC522's RST pin (GPIO25) and left the
+        # reader dead until the daemon restarted.
+        assert _nfc_diag_script("mfrc522", diagnostic) == "mfrc522_diag.py"
+
+    def test_pn5180_keeps_its_scripts(self):
+        assert _nfc_diag_script("pn5180", "nfc") == "pn5180_diag.py"
+        assert _nfc_diag_script("pn5180", "read_tag") == "read_tag.py"
+
+    @pytest.mark.parametrize("driver", ["mfrc522", "pn5180"])
+    @pytest.mark.parametrize("diagnostic", ["nfc", "read_tag"])
+    def test_script_exists(self, driver, diagnostic):
+        assert (SCRIPTS_DIR / _nfc_diag_script(driver, diagnostic)).is_file()
