@@ -75,6 +75,8 @@ IRQ_TIMER = 0x01
 ERR_MASK = 0x13
 
 STATUS2_CRYPTO1ON = 0x08
+# TModeReg as _init_chip sets it; the chip's reset default is 0x00
+TMODE_CONFIGURED = 0x8D
 FIFO_FLUSH = 0x80
 START_SEND = 0x80
 CMD_POWERDOWN = 0x10
@@ -199,7 +201,7 @@ class MFRC522:
     def _init_chip(self):
         # Timer: prescaler 0x0D3E with TAuto, reload 30 -> ~15 ms timeout, which
         # is what bounds a transceive when no tag answers.
-        self.write_reg(TModeReg, 0x8D)
+        self.write_reg(TModeReg, TMODE_CONFIGURED)
         self.write_reg(TPrescalerReg, 0x3E)
         self.write_reg(TReloadRegH, 0x00)
         self.write_reg(TReloadRegL, 30)
@@ -207,6 +209,20 @@ class MFRC522:
         self.write_reg(ModeReg, 0x3D)  # CRC preset 0x6363
         self.write_reg(RFCfgReg, (ANTENNA_GAIN & 0x07) << 4)
         self.rf_on()
+
+    def ensure_configured(self) -> bool:
+        """Re-apply the setup if the chip has fallen back to its reset defaults.
+
+        A brownout or a glitch on RST resets the MFRC522 behind the driver's
+        back: the antenna drivers go off (TxControlReg 0x80) and the timer
+        loses its setup (TModeReg 0x00). Every poll then gets no answer and
+        looks like an empty reader, so no tag is ever seen again until the
+        daemon restarts. Returns True when the setup had to be re-applied.
+        """
+        lost = self.read_reg(TModeReg) != TMODE_CONFIGURED or (self.read_reg(TxControlReg) & 0x03) != 0x03
+        if lost:
+            self._init_chip()
+        return lost
 
     def load_rf_config(self, tx: int = 0, rx: int = 0) -> None:
         """No-op. Present so the PN5180 call sites work unchanged."""

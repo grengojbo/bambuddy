@@ -246,3 +246,53 @@ class TestCapacityRefusal:
     def test_an_unread_cc_proves_nothing(self):
         assert capacity_refusal(None, 500) is None
         assert capacity_refusal(b"\xe1", 500) is None
+
+
+class TestIdlePollSetupCheck:
+    """A reader that skips the pre-poll reset checks its setup instead."""
+
+    def _reader(self, nfc):
+        reader = NFCReader.__new__(NFCReader)
+        reader._nfc = nfc
+        reader._state = NFCState.IDLE
+        reader._current_uid = None
+        reader._current_sak = None
+        reader._miss_count = 0
+        reader._ok = True
+        reader._error_count = 0
+        reader._poll_count = 0
+        reader._last_status_log = float("inf")
+        return reader
+
+    def test_a_reset_chip_is_set_up_again_and_said(self, caplog):
+        nfc = MagicMock()
+        nfc.needs_reset_before_poll = False
+        nfc.ensure_configured.return_value = True
+        nfc.activate_type_a.return_value = None
+
+        with caplog.at_level("WARNING"):
+            self._reader(nfc).poll()
+
+        nfc.ensure_configured.assert_called_once()
+        nfc.reset.assert_not_called()
+        assert "lost its setup" in caplog.text
+
+    def test_the_check_runs_before_the_tag_is_looked_for(self):
+        nfc = MagicMock()
+        nfc.needs_reset_before_poll = False
+        nfc.ensure_configured.return_value = False
+        nfc.activate_type_a.return_value = (bytes.fromhex("04B0F8163F6180"), 0x00)
+
+        event, data = self._reader(nfc).poll()
+
+        assert nfc.method_calls[0][0] == "ensure_configured"
+        assert event == "tag_detected"
+        assert data["tag_uid"] == "04B0F8163F6180"
+
+    def test_a_failing_check_does_not_stop_the_poll(self):
+        nfc = MagicMock()
+        nfc.needs_reset_before_poll = False
+        nfc.ensure_configured.side_effect = OSError("SPI gone")
+        nfc.activate_type_a.return_value = None
+
+        assert self._reader(nfc).poll() == ("none", None)

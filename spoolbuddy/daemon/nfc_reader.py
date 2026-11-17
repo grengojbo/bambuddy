@@ -245,6 +245,15 @@ class NFCReader:
                     self._init_rf()
                 except Exception as e:
                     logger.warning("NFC pre-poll reset failed: %s", e)
+            elif hasattr(self._nfc, "ensure_configured"):
+                # No reset before each poll, so a chip that reset itself (a
+                # brownout, a glitch on RST) has to be caught here, or it polls
+                # with its antenna off forever and never sees a tag again.
+                try:
+                    if self._nfc.ensure_configured():
+                        logger.warning("NFC reader had lost its setup (reset or brownout?), re-applied it")
+                except Exception as e:
+                    logger.warning("NFC setup check failed: %s", e)
         else:
             # Tag present: light RF cycle to reset card from ACTIVE back to IDLE
             # state after previous SELECT, so it responds to the next WUPA/REQA.

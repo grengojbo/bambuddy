@@ -6,7 +6,7 @@ Basic spool and an NTAG215, both read over SPI by this driver.
 
 import pytest
 from daemon.bambu_keys import TRAY_UUID_BLOCK
-from daemon.mfrc522 import MFRC522, NTAG_ACK
+from daemon.mfrc522 import MFRC522, NTAG_ACK, TModeReg, TxControlReg
 from daemon.nfc_reader import _extract_tray_uuid
 
 # Captured from a real Bambu Lab PLA Basic spool (white, 1 kg, 1.75 mm)
@@ -75,6 +75,56 @@ class TestDriverIdentity:
 
     def test_opts_out_of_the_pn5180_pre_poll_reset(self):
         assert MFRC522.needs_reset_before_poll is False
+
+
+def register_reader(regs: dict[int, int]) -> MFRC522:
+    """An MFRC522 over a fake register file."""
+    reader = object.__new__(MFRC522)
+    reader.read_reg = lambda reg: regs.get(reg, 0x00)
+
+    def write_reg(reg, val):
+        regs[reg] = val & 0xFF
+
+    reader.write_reg = write_reg
+    reader.set_bits = lambda reg, mask: write_reg(reg, regs.get(reg, 0x00) | mask)
+    return reader
+
+
+# Registers as read from the live chip after it had reset itself behind the
+# driver: antenna drivers off, timer back on its defaults.
+RESET_DEFAULTS = {TxControlReg: 0x80, TModeReg: 0x00}
+
+
+class TestEnsureConfigured:
+    def test_a_chip_on_its_reset_defaults_is_set_up_again(self, monkeypatch):
+        monkeypatch.setattr("daemon.mfrc522.time.sleep", lambda s: None)
+        regs = dict(RESET_DEFAULTS)
+        reader = register_reader(regs)
+
+        assert reader.ensure_configured() is True
+        assert regs[TModeReg] == 0x8D
+        assert regs[TxControlReg] & 0x03 == 0x03  # antenna back on
+
+    def test_a_configured_chip_is_left_alone(self, monkeypatch):
+        monkeypatch.setattr("daemon.mfrc522.time.sleep", lambda s: None)
+        regs = dict(RESET_DEFAULTS)
+        reader = register_reader(regs)
+        reader._init_chip()
+        writes = []
+        reader.write_reg = lambda reg, val: writes.append(reg)
+
+        assert reader.ensure_configured() is False
+        assert writes == []
+
+    def test_antenna_switched_off_alone_is_caught(self, monkeypatch):
+        monkeypatch.setattr("daemon.mfrc522.time.sleep", lambda s: None)
+        regs = dict(RESET_DEFAULTS)
+        reader = register_reader(regs)
+        reader._init_chip()
+        regs[TxControlReg] = 0x80
+
+        assert reader.ensure_configured() is True
+        assert regs[TxControlReg] & 0x03 == 0x03
 
 
 class TestActivateTypeA:
