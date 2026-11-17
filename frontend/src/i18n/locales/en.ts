@@ -7689,7 +7689,15 @@ export default {
       slot: 'Slot',
       empty: 'Empty',
     },
+    location: {
+      label: 'Storage location',
+      none: 'No location',
+      change: 'Change storage location',
+      saveFailed: 'Could not change the location',
+      noLocations: 'No storage locations yet. Add them in Bambuddy under Inventory → Locations.',
+    },
     inventory: {
+      groupByLocation: 'By location',
       search: 'Search spools...',
       empty: 'No spools in inventory',
       noResults: 'No matching spools',

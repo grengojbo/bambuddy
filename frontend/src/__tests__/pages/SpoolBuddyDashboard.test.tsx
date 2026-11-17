@@ -45,6 +45,8 @@ vi.mock('../../api/client', () => ({
     createSpool: vi.fn().mockResolvedValue({ id: 4 }),
     createSpoolmanInventorySpool: vi.fn().mockResolvedValue({ id: 4 }),
     clearPlate: vi.fn().mockResolvedValue({}),
+    getLocations: vi.fn().mockResolvedValue([]),
+    updateSpool: vi.fn().mockResolvedValue({}),
   },
   spoolbuddyApi: {
     getDevices: vi.fn().mockResolvedValue([]),
@@ -1191,6 +1193,38 @@ describe('SpoolBuddyDashboard', () => {
         expect(btn).toBeTruthy();
         expect(btn).toBeDisabled();
       });
+    });
+  });
+
+  describe('storage location on the spool card', () => {
+    it('shows the matched spool\'s location and moves it from the card', async () => {
+      const { api } = await import('../../api/client');
+      // Earlier tests leave Spoolman mode switched on in the shared mock.
+      vi.mocked(api.getSpoolmanSettings).mockResolvedValue({
+        spoolman_enabled: 'false', spoolman_url: '', spoolman_sync_mode: 'off',
+        spoolman_disable_weight_sync: 'false', spoolman_report_partial_usage: 'false',
+      } as never);
+      vi.mocked(api.getSpools).mockResolvedValue([
+        { id: 1, material: 'PLA', brand: 'Bambu', tag_uid: 'AA:BB', tray_uuid: null, archived_at: null, color_name: 'Red', rgba: 'FF0000FF', subtype: null, label_weight: 1000, core_weight: 250, weight_used: 100, location_id: 3, storage_location: 'BOX-01' },
+      ] as never);
+      vi.mocked(api.getLocations).mockResolvedValue([
+        { id: 3, name: 'BOX-01', identifier: null, spool_count: 1, created_at: '', updated_at: '' },
+        { id: 4, name: 'Shelf A', identifier: null, spool_count: 0, created_at: '', updated_at: '' },
+      ] as never);
+
+      renderPage({
+        deviceOnline: true,
+        matchedSpool: {
+          id: 1, tag_uid: 'AA:BB', material: 'PLA', subtype: null,
+          color_name: 'Red', rgba: 'FF0000FF', brand: 'Bambu',
+          label_weight: 1000, core_weight: 250, weight_used: 100,
+        },
+      } as never);
+
+      await waitFor(() => expect(screen.getByTestId('spool-location-value').textContent).toBe('BOX-01'));
+      fireEvent.click(screen.getByRole('button', { name: 'spoolbuddy.location.change' }));
+      fireEvent.click(await screen.findByRole('button', { name: /Shelf A/ }));
+      await waitFor(() => expect(api.updateSpool).toHaveBeenCalledWith(1, { location_id: 4 }));
     });
   });
 });

@@ -7284,7 +7284,15 @@ export default {
       slot: '슬롯',
       empty: '비어 있음'
     },
+    location: {
+      label: '보관 위치',
+      none: '위치 없음',
+      change: '보관 위치 변경',
+      saveFailed: '위치를 변경하지 못했습니다',
+      noLocations: '보관 위치가 아직 없습니다. Bambuddy의 재고 → 위치에서 추가하세요.',
+    },
     inventory: {
+      groupByLocation: '위치별',
       search: '스풀 검색...',
       empty: '재고에 스풀 없음',
       noResults: '일치하는 스풀 없음',

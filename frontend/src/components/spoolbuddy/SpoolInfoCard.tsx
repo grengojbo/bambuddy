@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, AlertTriangle, RefreshCw, Unlink } from 'lucide-react';
 import type { MatchedSpool, UnknownTagData } from '../../hooks/useSpoolBuddyState';
@@ -15,9 +15,11 @@ interface SpoolInfoCardProps {
   onAssignToAms?: () => void;
   isAssigned?: boolean;
   onUnassignFromAms?: () => void;
+  /** Full-width row at the end of the details grid (storage location). */
+  locationSlot?: ReactNode;
 }
 
-export function SpoolInfoCard({ spool, scaleWeight, onClose, onSyncWeight, onAssignToAms, isAssigned, onUnassignFromAms }: SpoolInfoCardProps) {
+export function SpoolInfoCard({ spool, scaleWeight, onClose, onSyncWeight, onAssignToAms, isAssigned, onUnassignFromAms, locationSlot }: SpoolInfoCardProps) {
   const { t } = useTranslation();
   const [syncing, setSyncing] = useState(false);
   const [synced, setSynced] = useState(false);
@@ -169,6 +171,7 @@ export function SpoolInfoCard({ spool, scaleWeight, onClose, onSyncWeight, onAss
             {spool.tag_uid ? spool.tag_uid.slice(-8) : '\u2014'}
           </span>
         </div>
+        {locationSlot}
       </div>
 
       {/* Action buttons */}

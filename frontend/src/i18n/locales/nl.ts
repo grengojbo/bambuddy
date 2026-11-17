@@ -7687,7 +7687,15 @@ export default {
       slot: 'Sleuf',
       empty: 'Leeg',
     },
+    location: {
+      label: 'Opslaglocatie',
+      none: 'Geen locatie',
+      change: 'Opslaglocatie wijzigen',
+      saveFailed: 'Locatie kon niet worden gewijzigd',
+      noLocations: 'Nog geen opslaglocaties. Voeg ze toe in Bambuddy onder Voorraad → Locaties.',
+    },
     inventory: {
+      groupByLocation: 'Per locatie',
       search: 'Spoelen zoeken...',
       empty: 'Geen spoelen in voorraad',
       noResults: 'Geen overeenkomende spoelen',

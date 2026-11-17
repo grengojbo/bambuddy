@@ -7718,7 +7718,15 @@ errors: {
       slot: 'Fack',
       empty: 'Tomt',
     },
+    location: {
+      label: 'Förvaringsplats',
+      none: 'Ingen plats',
+      change: 'Ändra förvaringsplats',
+      saveFailed: 'Kunde inte ändra platsen',
+      noLocations: 'Inga förvaringsplatser än. Lägg till dem i Bambuddy under Lager → Platser.',
+    },
     inventory: {
+      groupByLocation: 'Efter plats',
       search: 'Sök rullar...',
       empty: 'Inga rullar i inventariet',
       noResults: 'Inga matchande rullar',

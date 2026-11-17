@@ -7644,7 +7644,15 @@ export default {
       slot: 'Ranura',
       empty: 'Vacía',
     },
+    location: {
+      label: 'Ubicación',
+      none: 'Sin ubicación',
+      change: 'Cambiar ubicación',
+      saveFailed: 'No se pudo cambiar la ubicación',
+      noLocations: 'Aún no hay ubicaciones. Añádelas en Bambuddy en Inventario → Ubicaciones.',
+    },
     inventory: {
+      groupByLocation: 'Por ubicación',
       search: 'Buscar bobinas...',
       empty: 'No hay bobinas en el inventario',
       noResults: 'No hay bobinas coincidentes',

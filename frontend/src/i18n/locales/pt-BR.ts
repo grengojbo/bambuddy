@@ -7623,7 +7623,15 @@ export default {
       slot: 'Slot',
       empty: 'Vazio',
     },
+    location: {
+      label: 'Local de armazenamento',
+      none: 'Sem local',
+      change: 'Alterar local de armazenamento',
+      saveFailed: 'Não foi possível alterar o local',
+      noLocations: 'Ainda não há locais. Adicione-os no Bambuddy em Inventário → Locais.',
+    },
     inventory: {
+      groupByLocation: 'Por local',
       search: 'Buscar carretéis...',
       empty: 'Nenhum carretel no inventário',
       noResults: 'Nenhum carretel correspondente',

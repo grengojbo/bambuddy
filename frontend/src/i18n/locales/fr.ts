@@ -7624,7 +7624,15 @@ export default {
       slot: 'Emplacement',
       empty: 'Vide',
     },
+    location: {
+      label: 'Emplacement',
+      none: 'Aucun emplacement',
+      change: 'Changer l\'emplacement',
+      saveFailed: 'Impossible de changer l\'emplacement',
+      noLocations: 'Aucun emplacement pour l\'instant. Ajoutez-en dans Bambuddy sous Inventaire → Emplacements.',
+    },
     inventory: {
+      groupByLocation: 'Par emplacement',
       search: 'Rechercher des bobines...',
       empty: 'Aucune bobine dans l\'inventaire',
       noResults: 'Aucune bobine correspondante',

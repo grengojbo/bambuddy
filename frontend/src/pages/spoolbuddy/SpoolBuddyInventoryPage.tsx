@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useOutletContext } from 'react-router-dom';
-import { Search, X, Package, QrCode } from 'lucide-react';
+import { Search, X, Package, QrCode, MapPin } from 'lucide-react';
 import { api } from '../../api/client';
 import type { InventorySpool } from '../../api/client';
 import { resolveSpoolColorName, getSwatchStyle, spoolColorString } from '../../utils/colors';
@@ -16,6 +16,28 @@ import { AssignToAmsModal } from '../../components/spoolbuddy/AssignToAmsModal';
 import { QrAssignTargetModal } from '../../components/QrAssignTargetModal';
 import type { SpoolBuddyOutletContext } from '../../components/spoolbuddy/SpoolBuddyLayout';
 import { useToast } from '../../contexts/ToastContext';
+import { SpoolLocationField } from '../../components/spoolbuddy/SpoolLocationField';
+import { inventoryLocationsQueryKey } from '../../utils/inventoryQueries';
+import { groupSpoolsByLocation } from '../../utils/spoolLocation';
+
+// Per-kiosk convenience, so the grid comes back the way it was left.
+const GROUP_BY_LOCATION_KEY = 'spoolbuddy.inventory.groupByLocation';
+
+function readGroupByLocation(): boolean {
+  try {
+    return window.localStorage.getItem(GROUP_BY_LOCATION_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeGroupByLocation(value: boolean) {
+  try {
+    window.localStorage.setItem(GROUP_BY_LOCATION_KEY, value ? '1' : '0');
+  } catch {
+    // Storage blocked: the toggle still works for this visit.
+  }
+}
 
 type SlotInfo = { ams_id: number; tray_id: number; printer_name?: string | null; printer_model?: string | null };
 
@@ -92,6 +114,14 @@ export function SpoolBuddyInventoryPage() {
   const [selectedSpoolId, setSelectedSpoolId] = useState<number | null>(null);
   const [showAssignAmsModal, setShowAssignAmsModal] = useState(false);
   const [qrTargetModalOpen, setQrTargetModalOpen] = useState(false);
+  const [groupByLocation, setGroupByLocation] = useState(readGroupByLocation);
+
+  const toggleGroupByLocation = () => {
+    setGroupByLocation(prev => {
+      writeGroupByLocation(!prev);
+      return !prev;
+    });
+  };
 
   const { data: spoolmanSettings } = useQuery({
     queryKey: ['spoolman-settings'],
@@ -106,6 +136,12 @@ export function SpoolBuddyInventoryPage() {
     queryFn: () => spoolmanMode ? api.getSpoolmanInventorySpools(false) : api.getSpools(false),
     enabled: spoolmanSettings !== undefined,
     refetchInterval: 30000,
+  });
+
+  const { data: locations = [] } = useQuery({
+    queryKey: inventoryLocationsQueryKey,
+    queryFn: api.getLocations,
+    enabled: groupByLocation,
   });
 
   const { data: assignments = [] } = useQuery({
@@ -182,6 +218,24 @@ export function SpoolBuddyInventoryPage() {
     });
   }, [activeSpools, filterMode, searchQuery, assignedSpoolIds, colorCatalogVersion]);
 
+  const locationGroups = useMemo(
+    () => (groupByLocation ? groupSpoolsByLocation(filteredSpools, locations) : []),
+    [groupByLocation, filteredSpools, locations],
+  );
+
+  const renderCards = (list: InventorySpool[]) => (
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-2">
+      {list.map(spool => (
+        <CatalogCard
+          key={spool.id}
+          spool={spool}
+          assignment={assignmentMap[spool.id]}
+          onClick={() => setSelectedSpoolId(spool.id)}
+        />
+      ))}
+    </div>
+  );
+
   return (
     <div className="h-full flex flex-col">
       {/* Search + filter pills */}
@@ -215,8 +269,9 @@ export function SpoolBuddyInventoryPage() {
           )}
         </div>
 
-        {/* Filter pills — inline scrollable row */}
-        <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+        {/* Filter pills — inline scrollable row, group toggle pinned right */}
+        <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0 flex gap-1.5 overflow-x-auto no-scrollbar">
           <FilterPill
             active={filterMode === 'all'}
             onClick={() => setFilterMode('all')}
@@ -239,6 +294,20 @@ export function SpoolBuddyInventoryPage() {
             />
           ))}
         </div>
+        <button
+          type="button"
+          onClick={toggleGroupByLocation}
+          aria-pressed={groupByLocation}
+          className={`shrink-0 min-h-[44px] px-4 flex items-center gap-1.5 rounded-full text-sm font-medium border whitespace-nowrap transition-colors ${
+            groupByLocation
+              ? 'bg-bambu-green/20 text-bambu-green border-bambu-green/50'
+              : 'bg-transparent text-white/50 border-bambu-dark-tertiary hover:text-white/70'
+          }`}
+        >
+          <MapPin className="w-4 h-4" />
+          {t('spoolbuddy.inventory.groupByLocation')}
+        </button>
+        </div>
       </div>
 
       {/* Spool grid */}
@@ -256,17 +325,25 @@ export function SpoolBuddyInventoryPage() {
                 : t('spoolbuddy.inventory.empty', 'No spools in inventory')}
             </p>
           </div>
-        ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-2">
-            {filteredSpools.map(spool => (
-              <CatalogCard
-                key={spool.id}
-                spool={spool}
-                assignment={assignmentMap[spool.id]}
-                onClick={() => setSelectedSpoolId(spool.id)}
-              />
+        ) : groupByLocation ? (
+          <div className="space-y-3">
+            {locationGroups.map(group => (
+              <section key={group.key} aria-label={group.name ?? t('spoolbuddy.location.none')}>
+                <h3 className="sticky top-0 z-10 -mx-3 px-3 py-2 mb-1 bg-bambu-dark/95 backdrop-blur flex items-center gap-2 text-sm font-semibold">
+                  <MapPin className={`w-4 h-4 ${group.name ? 'text-bambu-green' : 'text-white/30'}`} />
+                  <span className={group.name ? 'text-white' : 'text-white/50'}>
+                    {group.name ?? t('spoolbuddy.location.none')}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-bambu-dark-tertiary text-xs text-white/60">
+                    {group.spools.length}
+                  </span>
+                </h3>
+                {renderCards(group.spools)}
+              </section>
             ))}
           </div>
+        ) : (
+          renderCards(filteredSpools)
         )}
       </div>
 
@@ -284,6 +361,7 @@ export function SpoolBuddyInventoryPage() {
               spool={liveSpool}
               assignment={assignmentMap[liveSpool.id]}
               sbState={sbState}
+              spoolmanMode={spoolmanMode}
               onSyncWeight={() => {
                 void refetchSpools();
               }}
@@ -400,10 +478,11 @@ function CatalogCard({ spool, assignment, onClick }: {
 }
 
 /* Detail bottom sheet */
-function SpoolDetailModal({ spool, assignment, sbState, onSyncWeight, onAssignToAms, onUnassignFromAms, onClose }: {
+function SpoolDetailModal({ spool, assignment, sbState, spoolmanMode, onSyncWeight, onAssignToAms, onUnassignFromAms, onClose }: {
   spool: InventorySpool;
   assignment?: SlotInfo;
   sbState: SpoolBuddyOutletContext['sbState'];
+  spoolmanMode: boolean;
   onSyncWeight: () => void;
   onAssignToAms: () => void;
   onUnassignFromAms?: () => void;
@@ -444,6 +523,14 @@ function SpoolDetailModal({ spool, assignment, sbState, onSyncWeight, onAssignTo
               onUnassignFromAms={onUnassignFromAms}
               onClose={onClose}
               className="max-w-md"
+              locationSlot={
+                <SpoolLocationField
+                  spoolId={spool.id}
+                  locationId={spool.location_id}
+                  storageLocation={spool.storage_location}
+                  spoolmanMode={spoolmanMode}
+                />
+              }
             />
           </div>
         </div>

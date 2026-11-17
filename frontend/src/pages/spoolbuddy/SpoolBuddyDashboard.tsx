@@ -8,6 +8,7 @@ import type { MatchedSpool, UnknownTagData } from '../../hooks/useSpoolBuddyStat
 import { useToast } from '../../contexts/ToastContext';
 import { SpoolIcon } from '../../components/spoolbuddy/SpoolIcon';
 import { SpoolInfoCard, UnknownTagCard } from '../../components/spoolbuddy/SpoolInfoCard';
+import { SpoolLocationField } from '../../components/spoolbuddy/SpoolLocationField';
 import { spoolColorString } from '../../utils/colors';
 import { AssignToAmsModal } from '../../components/spoolbuddy/AssignToAmsModal';
 import { LinkSpoolModal } from '../../components/spoolbuddy/LinkSpoolModal';
@@ -690,6 +691,19 @@ export function SpoolBuddyDashboard() {
                       : undefined
                   }
                   onClose={handleCloseSpoolCard}
+                  locationSlot={
+                    // Only for a spool from the inventory query: the bridge
+                    // spools (just linked, or matched before the query caught
+                    // up) carry no location fields to show.
+                    displayedSpool && !justLinkedSpool ? (
+                      <SpoolLocationField
+                        spoolId={displayedSpool.id}
+                        locationId={displayedSpool.location_id}
+                        storageLocation={displayedSpool.storage_location}
+                        spoolmanMode={spoolmanMode}
+                      />
+                    ) : undefined
+                  }
                 />
               ) : currentTagId && displayedTagId && !displayedSpool && !sbState.matchedSpool && hiddenTagId !== displayedTagId ? (
                 <UnknownTagCard

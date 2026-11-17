@@ -7272,7 +7272,15 @@ export default {
       slot: "Слот",
       empty: "Пусто",
     },
+    location: {
+      label: 'Место хранения',
+      none: 'Без места',
+      change: 'Изменить место хранения',
+      saveFailed: 'Не удалось изменить место',
+      noLocations: 'Мест хранения пока нет. Добавьте их в Bambuddy: Инвентарь → Места.',
+    },
     inventory: {
+      groupByLocation: 'По месту',
       search: "Поиск катушек...",
       empty: "В учёте нет катушек",
       noResults: "Подходящие катушки не найдены",

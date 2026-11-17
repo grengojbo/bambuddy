@@ -7621,7 +7621,15 @@ export default {
       slot: '槽位',
       empty: '空',
     },
+    location: {
+      label: '存放位置',
+      none: '無位置',
+      change: '變更存放位置',
+      saveFailed: '無法變更位置',
+      noLocations: '尚無存放位置。請在 Bambuddy 的 庫存 → 位置 中新增。',
+    },
     inventory: {
+      groupByLocation: '依位置',
       search: '搜尋耗材...',
       empty: '庫存中沒有耗材',
       noResults: '沒有匹配的耗材',
