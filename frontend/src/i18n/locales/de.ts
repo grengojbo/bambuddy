@@ -7617,7 +7617,15 @@ export default {
       slot: 'Slot',
       empty: 'Leer',
     },
+    location: {
+      label: 'Lagerort',
+      none: 'Kein Lagerort',
+      change: 'Lagerort ändern',
+      saveFailed: 'Lagerort konnte nicht geändert werden',
+      noLocations: 'Noch keine Lagerorte. Lege sie in Bambuddy unter Inventar → Lagerorte an.',
+    },
     inventory: {
+      groupByLocation: 'Nach Lagerort',
       search: 'Spulen suchen...',
       empty: 'Keine Spulen im Inventar',
       noResults: 'Keine passenden Spulen',

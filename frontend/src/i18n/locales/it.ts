@@ -7604,7 +7604,15 @@ export default {
       slot: 'Slot',
       empty: 'Vuoto',
     },
+    location: {
+      label: 'Posizione',
+      none: 'Nessuna posizione',
+      change: 'Cambia posizione',
+      saveFailed: 'Impossibile cambiare la posizione',
+      noLocations: 'Nessuna posizione ancora. Aggiungile in Bambuddy in Inventario → Posizioni.',
+    },
     inventory: {
+      groupByLocation: 'Per posizione',
       search: 'Cerca bobine...',
       empty: 'Nessuna bobina nell\'inventario',
       noResults: 'Nessuna bobina corrispondente',

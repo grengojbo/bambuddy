@@ -7670,7 +7670,15 @@ export default {
       slot: 'Slot',
       empty: 'Pusty',
     },
+    location: {
+      label: 'Miejsce przechowywania',
+      none: 'Brak miejsca',
+      change: 'Zmień miejsce przechowywania',
+      saveFailed: 'Nie udało się zmienić miejsca',
+      noLocations: 'Brak miejsc przechowywania. Dodaj je w Bambuddy: Magazyn → Lokalizacje.',
+    },
     inventory: {
+      groupByLocation: 'Wg miejsca',
       search: 'Szukaj szpul...',
       empty: 'Brak szpul w magazynie',
       noResults: 'Brak pasujących szpul',

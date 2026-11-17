@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Check, AlertTriangle, RefreshCw, Unlink } from 'lucide-react';
@@ -19,6 +19,8 @@ interface InventorySpoolInfoCardProps {
   isAssigned?: boolean;
   onUnassignFromAms?: () => void;
   className?: string;
+  /** Full-width row at the end of the details grid (storage location). */
+  locationSlot?: ReactNode;
 }
 
 export function InventorySpoolInfoCard({
@@ -31,6 +33,7 @@ export function InventorySpoolInfoCard({
   isAssigned,
   onUnassignFromAms,
   className,
+  locationSlot,
 }: InventorySpoolInfoCardProps) {
   const { t } = useTranslation();
   const [syncing, setSyncing] = useState(false);
@@ -246,6 +249,7 @@ export function InventorySpoolInfoCard({
             <p className="text-sm leading-5 text-zinc-300 whitespace-pre-wrap break-words max-h-[3.75rem] overflow-y-auto pr-1">{note}</p>
           </div>
         )}
+        {locationSlot}
       </div>
 
       <div className="flex gap-2 justify-center">

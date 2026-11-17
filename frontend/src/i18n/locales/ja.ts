@@ -7618,7 +7618,15 @@ export default {
       slot: 'スロット',
       empty: '空',
     },
+    location: {
+      label: '保管場所',
+      none: '保管場所なし',
+      change: '保管場所を変更',
+      saveFailed: '保管場所を変更できませんでした',
+      noLocations: '保管場所はまだありません。Bambuddy の 在庫 → 保管場所 で追加してください。',
+    },
     inventory: {
+      groupByLocation: '保管場所別',
       search: 'スプールを検索...',
       empty: 'インベントリにスプールがありません',
       noResults: '一致するスプールがありません',

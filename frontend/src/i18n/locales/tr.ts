@@ -7561,7 +7561,15 @@ export default {
       slot: 'Yuva',
       empty: 'Boş',
     },
+    location: {
+      label: 'Depolama konumu',
+      none: 'Konum yok',
+      change: 'Depolama konumunu değiştir',
+      saveFailed: 'Konum değiştirilemedi',
+      noLocations: 'Henüz depolama konumu yok. Bambuddy\'de Envanter → Konumlar altından ekleyin.',
+    },
     inventory: {
+      groupByLocation: 'Konuma göre',
       search: 'Makaralarda ara...',
       empty: 'Envanterde makara yok',
       noResults: 'Eşleşen makara yok',
