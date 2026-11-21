@@ -3050,8 +3050,11 @@ async def _unlink_stale_assignments(printer_id: int, ams_data: list, printing_no
                                 printer_id=printer_id,
                                 ams_id=assignment.ams_id,
                                 tray_id=assignment.tray_id,
-                                # Fork: the slot's id is the previous spool's; see
-                                # services/preconfig_preset.py.
+                                # Fork: the slot's tray_info_idx is whatever the
+                                # previous spool left (a BMCU slot reads blank, then
+                                # reports the old id), so it is not offered as a
+                                # fallback: an unresolvable preset lands on the
+                                # material's generic id, not on another spool's.
                                 current_tray_info_idx="",
                                 current_tray_type=cur_type,
                                 current_tray_sub_brands=current_tray.get("tray_sub_brands", ""),
