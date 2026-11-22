@@ -8124,7 +8124,7 @@ class TestKProfileWriteAcks:
     def test_writers_return_their_sequence_id(self, mqtt_client):
         seq = mqtt_client.set_kprofile(filament_id="GFL99", name="test", k_value="0.022000")
         assert seq == self._sent(mqtt_client)["sequence_id"]
-        assert seq in mqtt_client._pending_cali_acks
+        assert mqtt_client._acks.is_pending(seq)
 
     def test_writers_return_none_when_disconnected(self, mqtt_client):
         mqtt_client.state.connected = False
@@ -8197,14 +8197,14 @@ class TestKProfileWriteAcks:
     async def test_pending_slot_is_released(self, mqtt_client):
         seq = mqtt_client.set_kprofile(filament_id="GFL99", name="test", k_value="0.022000")
         await mqtt_client.await_cali_ack(seq, timeout=0.3)
-        assert mqtt_client._pending_cali_acks == {}
+        assert mqtt_client._acks.pending_count == 0
 
     def test_delete_ack_is_matched_too(self, mqtt_client):
         seq = mqtt_client.delete_kprofile(cali_idx=1, filament_id="GFL99", nozzle_id="HH00-0.4")
         mqtt_client._process_message(
             {"print": {"command": "extrusion_cali_del", "result": "success", "sequence_id": seq}}
         )
-        assert mqtt_client._pending_cali_acks[seq]["result"] == "success"
+        assert mqtt_client._acks.answer(seq)["result"] == "success"
 
 
 class TestKProfileRequestCorrelation:
