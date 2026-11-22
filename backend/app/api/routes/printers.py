@@ -4267,6 +4267,35 @@ async def home_axes(
     return {"success": True, "message": "Full auto-home sequence sent"}
 
 
+@router.post("/{printer_id}/disable-steppers")
+async def disable_steppers(
+    printer_id: int,
+    _=RequirePrinterPermissionIfAuthEnabled(Permission.PRINTERS_CONTROL),
+    db: AsyncSession = Depends(get_db, scope="function"),
+):
+    """Release the stepper motors (`M84`) so the toolhead can be moved by hand.
+
+    Bambu Studio has no MQTT command for this either and sends the g-code.
+    The axes lose their position; auto-home before the next precise move.
+    Refused while a print is active: releasing the motors mid-print ruins it.
+    """
+    result = await db.execute(select(Printer).where(Printer.id == printer_id))
+    printer = result.scalar_one_or_none()
+    if not printer:
+        raise HTTPException(404, "Printer not found")
+
+    client = printer_manager.get_client(printer_id)
+    if not client or not client.state.connected:
+        raise HTTPException(400, "Printer not connected")
+    if client.state.state in printer_manager.ACTIVE_PRINT_STATES:
+        raise HTTPException(409, "The printer is printing; release the motors once it is idle")
+
+    ack = await client.call_with_ack(client.send_gcode, "M84")
+    confirmed = _printer_verdict(ack, "Failed to send the release-motors command")
+
+    return {"success": True, "message": "Motors released", "confirmed": confirmed}
+
+
 @router.post("/{printer_id}/hms/clear")
 async def clear_hms_errors(
     printer_id: int,

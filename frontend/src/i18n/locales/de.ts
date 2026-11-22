@@ -629,6 +629,8 @@ export default {
       homeZ: 'Automatische Referenzfahrt',
       moveAnyway: 'Trotzdem bewegen',
       homingStarted: 'Drucker wird automatisch referenziert…',
+      releaseMotors: 'Motoren freigeben',
+      motorsReleased: 'Motoren freigegeben – der Druckkopf lässt sich von Hand bewegen',
     },
     // Permissions
     permission: {

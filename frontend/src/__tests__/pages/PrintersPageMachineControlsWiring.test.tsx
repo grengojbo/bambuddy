@@ -99,6 +99,7 @@ function setup(model: string, statusExtra: Record<string, unknown> = {}, printer
     http.post('/api/v1/printers/:id/xy-jog', record),
     http.post('/api/v1/printers/:id/extruder-jog', record),
     http.post('/api/v1/printers/:id/home-axes', record),
+    http.post('/api/v1/printers/:id/disable-steppers', record),
     http.post('/api/v1/printers/:id/bed-jog', record),
     http.post('/api/v1/printers/:id/select-extruder', record),
   );
@@ -303,6 +304,15 @@ describe('PrintersPage machine controls: movement', () => {
     await user.click(await screen.findByTitle('Jog Controls'));
     await user.click(await screen.findByLabelText('Auto Home'));
     await waitFor(() => expect(sent).toEqual([{ path: 'home-axes', params: { axes: 'all' } }]));
+  });
+
+  it('Release motors -> POST disable-steppers', async () => {
+    const user = userEvent.setup();
+    const sent = setup('X1C');
+
+    await user.click(await screen.findByTitle('Jog Controls'));
+    await user.click(await screen.findByLabelText('Release motors'));
+    await waitFor(() => expect(sent).toEqual([{ path: 'disable-steppers', params: {} }]));
   });
 
   it('movement controls are not reachable while printing', async () => {

@@ -629,6 +629,8 @@ export default {
       homeZ: '自動歸零',
       moveAnyway: '強制移動',
       homingStarted: '印表機自動歸零中…',
+      releaseMotors: '釋放馬達',
+      motorsReleased: '馬達已釋放，可用手移動工具頭',
     },
     // Permissions
     permission: {

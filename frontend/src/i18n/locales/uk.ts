@@ -632,6 +632,8 @@ export default {
       homeZ: "Запустити автопозиціювання",
       moveAnyway: "Усе одно перемістити",
       homingStarted: "Виконується автопозиціювання принтера…",
+      releaseMotors: "Відпустити мотори",
+      motorsReleased: "Мотори відпущено — голівку можна рухати рукою",
     },
     // Permissions
     permission: {

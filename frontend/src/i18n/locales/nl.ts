@@ -632,6 +632,8 @@ export default {
       homeZ: 'Auto Home',
       moveAnyway: 'Toch verplaatsen',
       homingStarted: 'Printer automatisch homen…',
+      releaseMotors: 'Motoren vrijgeven',
+      motorsReleased: 'Motoren vrijgegeven — de printkop kan met de hand worden bewogen',
     },
     // Permissions
     permission: {

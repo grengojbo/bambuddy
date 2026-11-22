@@ -629,6 +629,8 @@ export default {
       homeZ: 'Azzeramento automatico',
       moveAnyway: 'Muovi comunque',
       homingStarted: 'Azzeramento automatico in corso…',
+      releaseMotors: 'Sblocca motori',
+      motorsReleased: 'Motori sbloccati: la testina si può muovere a mano',
     },
     // Permissions
     permission: {

@@ -597,7 +597,9 @@ export default {
       notHomedMessage: '마지막 인쇄 이후 홈 설정이 되지 않았습니다. 안전한 위치 지정을 위해 자동 홈 설정을 먼저 실행하거나, 그냥 이동하세요 — 소프트 엔드스톱이 무시됩니다.',
       homeZ: '자동 홈 설정',
       moveAnyway: '그냥 이동',
-      homingStarted: '프린터 자동 홈 설정 중…'
+      homingStarted: '프린터 자동 홈 설정 중…',
+      releaseMotors: '모터 해제',
+      motorsReleased: '모터가 해제되었습니다 — 툴헤드를 손으로 움직일 수 있습니다'
     },
     permission: {
       noAdd: '프린터를 추가할 권한이 없습니다',

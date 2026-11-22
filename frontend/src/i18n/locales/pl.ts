@@ -634,6 +634,8 @@ export default {
       homeZ: 'Automatyczne bazowanie',
       moveAnyway: 'Przesuń mimo to',
       homingStarted: 'Automatyczne bazowanie drukarki…',
+      releaseMotors: 'Zwolnij silniki',
+      motorsReleased: 'Silniki zwolnione — głowicę można przesuwać ręcznie',
     },
     // Permissions
     permission: {

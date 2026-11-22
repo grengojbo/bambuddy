@@ -5598,6 +5598,12 @@ export const api = {
       `/printers/${printerId}/home-axes?axes=${axes}`,
       { method: 'POST' }
     ),
+  // Release the stepper motors (M84) so the toolhead can be moved by hand.
+  disableSteppers: (printerId: number) =>
+    request<{ success: boolean; message: string; confirmed: boolean }>(
+      `/printers/${printerId}/disable-steppers`,
+      { method: 'POST' }
+    ),
 
   // Chamber Light Control
   setChamberLight: (printerId: number, on: boolean) =>
