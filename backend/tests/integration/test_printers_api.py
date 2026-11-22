@@ -5043,6 +5043,7 @@ class TestExtruderJogAPI:
         printer = await printer_factory(name="P", model="X1C")
         mock_client = MagicMock()
         mock_client.send_gcode.return_value = True
+        mock_client.call_with_ack = AckTracker().call
         with patch("backend.app.api.routes.printers.printer_manager") as mock_pm:
             mock_pm.get_client.return_value = mock_client
             response = await async_client.post(f"/api/v1/printers/{printer.id}/extruder-jog?distance=5")
@@ -5058,6 +5059,7 @@ class TestExtruderJogAPI:
         printer = await printer_factory(name="P", model="X1C")
         mock_client = MagicMock()
         mock_client.send_gcode.return_value = True
+        mock_client.call_with_ack = AckTracker().call
         with patch("backend.app.api.routes.printers.printer_manager") as mock_pm:
             mock_pm.get_client.return_value = mock_client
             response = await async_client.post(f"/api/v1/printers/{printer.id}/extruder-jog?distance=-3.5")
