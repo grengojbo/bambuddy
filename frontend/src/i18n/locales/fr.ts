@@ -621,6 +621,8 @@ export default {
       homeZ: 'Référence automatique',
       moveAnyway: 'Déplacer quand même',
       homingStarted: 'Référencement automatique en cours…',
+      releaseMotors: 'Libérer les moteurs',
+      motorsReleased: 'Moteurs libérés — la tête peut être déplacée à la main',
     },
     // Permissions
     permission: {

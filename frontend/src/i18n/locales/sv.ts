@@ -624,6 +624,8 @@ export default {
       homeZ: 'Auto-riktning',
       moveAnyway: 'Flytta ändå',
       homingStarted: 'Auto-riktning pågår…',
+      releaseMotors: 'Frigör motorer',
+      motorsReleased: 'Motorerna är frigjorda — skrivhuvudet kan flyttas för hand',
     },
     // Permissions
     permission: {

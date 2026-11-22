@@ -620,6 +620,8 @@ export default {
       homeZ: 'オートホーミング',
       moveAnyway: 'このまま移動',
       homingStarted: 'プリンターをオートホーミング中…',
+      releaseMotors: 'モーターを解放',
+      motorsReleased: 'モーターを解放しました — ツールヘッドを手で動かせます',
     },
     // Permissions
     permission: {

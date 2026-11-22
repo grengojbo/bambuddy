@@ -621,6 +621,8 @@ export default {
       homeZ: '自动归零',
       moveAnyway: '强制移动',
       homingStarted: '打印机自动归零中…',
+      releaseMotors: '释放电机',
+      motorsReleased: '电机已释放，可用手移动工具头',
     },
     // Permissions
     permission: {

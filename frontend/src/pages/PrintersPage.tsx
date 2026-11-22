@@ -134,6 +134,7 @@ import {
   XCircle,
   User,
   Home,
+  LockOpen,
   Printer as PrinterIcon,
   Info,
   Cable,
@@ -3120,6 +3121,15 @@ function PrinterCard({
       showToast(error.message || t('printers.toast.failedToSendCommand'), 'error'),
   });
 
+  const disableSteppersMutation = useMutation({
+    mutationFn: () => api.disableSteppers(printer.id),
+    onSuccess: () => {
+      showToast(t('printers.bedJog.motorsReleased'));
+    },
+    onError: (error: Error) =>
+      showToast(error.message || t('printers.toast.failedToSendCommand'), 'error'),
+  });
+
   // Plate detection setting mutation
   const plateDetectionMutation = useMutation({
     mutationFn: (enabled: boolean) => api.updatePrinter(printer.id, { plate_detection_enabled: enabled }),
@@ -5120,7 +5130,18 @@ function PrinterCard({
                                       >
                                         <ArrowDown className="w-[var(--pc-i4,1rem)] h-[var(--pc-i4,1rem)]" />
                                       </button>
-                                      <div />
+                                      <button
+                                        onClick={() => {
+                                          setShowBedJogMenu(null);
+                                          disableSteppersMutation.mutate();
+                                        }}
+                                        disabled={disableSteppersMutation.isPending}
+                                        className={jogButtonClass}
+                                        aria-label={t('printers.bedJog.releaseMotors')}
+                                        title={t('printers.bedJog.releaseMotors')}
+                                      >
+                                        <LockOpen className="w-[var(--pc-i4,1rem)] h-[var(--pc-i4,1rem)]" />
+                                      </button>
                                     </div>
                                     <div className="flex flex-col items-center gap-1">
                                       <button

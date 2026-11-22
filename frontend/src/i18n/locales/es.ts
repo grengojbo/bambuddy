@@ -621,6 +621,8 @@ export default {
       homeZ: 'Autoorigen',
       moveAnyway: 'Mover de todos modos',
       homingStarted: 'Llevando la impresora al origen…',
+      releaseMotors: 'Liberar motores',
+      motorsReleased: 'Motores liberados: el cabezal se puede mover a mano',
     },
     // Permissions
     permission: {

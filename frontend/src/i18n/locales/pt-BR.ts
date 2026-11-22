@@ -621,6 +621,8 @@ export default {
       homeZ: 'Referência automática',
       moveAnyway: 'Mover assim mesmo',
       homingStarted: 'Referenciando impressora automaticamente…',
+      releaseMotors: 'Liberar motores',
+      motorsReleased: 'Motores liberados — o cabeçote pode ser movido à mão',
     },
     // Permissions
     permission: {

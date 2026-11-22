@@ -621,6 +621,8 @@ export default {
       homeZ: 'Otomatik Sıfırla',
       moveAnyway: 'Yine de hareket ettir',
       homingStarted: 'Yazıcı otomatik sıfırlanıyor…',
+      releaseMotors: 'Motorları serbest bırak',
+      motorsReleased: 'Motorlar serbest — kafa elle hareket ettirilebilir',
     },
     // İzinler
     permission: {

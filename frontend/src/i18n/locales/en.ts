@@ -626,6 +626,8 @@ export default {
       homeZ: 'Auto Home',
       moveAnyway: 'Move anyway',
       homingStarted: 'Auto-homing printer…',
+      releaseMotors: 'Release motors',
+      motorsReleased: 'Motors released — the toolhead can be moved by hand',
     },
     // Permissions
     permission: {
