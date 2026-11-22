@@ -12,6 +12,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from backend.app.core.config import settings
+from backend.app.services.mqtt_ack import AckTracker
 from backend.app.services.printer_media import PrinterFilesJobStatus, PrinterFilesZipResult
 
 
@@ -4561,6 +4562,7 @@ class TestSetNozzleTemperatureAPI:
         """Omitting nozzle defaults to 0 (right/default)."""
         printer = await printer_factory(name="P", model="X1C")
         mock_client = MagicMock()
+        mock_client.call_with_ack = AckTracker().call
         mock_client.set_nozzle_temperature.return_value = True
         with patch("backend.app.api.routes.printers.printer_manager") as mock_pm:
             mock_pm.get_client.return_value = mock_client
@@ -4574,6 +4576,7 @@ class TestSetNozzleTemperatureAPI:
         """nozzle=1 reaches the client method as the second positional arg."""
         printer = await printer_factory(name="P", model="H2D")
         mock_client = MagicMock()
+        mock_client.call_with_ack = AckTracker().call
         mock_client.set_nozzle_temperature.return_value = True
         with patch("backend.app.api.routes.printers.printer_manager") as mock_pm:
             mock_pm.get_client.return_value = mock_client
@@ -4587,6 +4590,7 @@ class TestSetNozzleTemperatureAPI:
         """target=0 turns the heater off; must NOT be rejected by Query bounds."""
         printer = await printer_factory(name="P", model="X1C")
         mock_client = MagicMock()
+        mock_client.call_with_ack = AckTracker().call
         mock_client.set_nozzle_temperature.return_value = True
         with patch("backend.app.api.routes.printers.printer_manager") as mock_pm:
             mock_pm.get_client.return_value = mock_client
@@ -4613,6 +4617,7 @@ class TestSetNozzleTemperatureAPI:
     async def test_client_failure_returns_500(self, async_client: AsyncClient, printer_factory):
         printer = await printer_factory(name="P", model="X1C")
         mock_client = MagicMock()
+        mock_client.call_with_ack = AckTracker().call
         mock_client.set_nozzle_temperature.return_value = False
         with patch("backend.app.api.routes.printers.printer_manager") as mock_pm:
             mock_pm.get_client.return_value = mock_client
@@ -4643,6 +4648,7 @@ class TestSetBedTemperatureAPI:
     async def test_success(self, async_client: AsyncClient, printer_factory):
         printer = await printer_factory(name="P", model="X1C")
         mock_client = MagicMock()
+        mock_client.call_with_ack = AckTracker().call
         mock_client.set_bed_temperature.return_value = True
         with patch("backend.app.api.routes.printers.printer_manager") as mock_pm:
             mock_pm.get_client.return_value = mock_client
@@ -4656,6 +4662,7 @@ class TestSetBedTemperatureAPI:
         """target=0 turns the bed heater off."""
         printer = await printer_factory(name="P", model="X1C")
         mock_client = MagicMock()
+        mock_client.call_with_ack = AckTracker().call
         mock_client.set_bed_temperature.return_value = True
         with patch("backend.app.api.routes.printers.printer_manager") as mock_pm:
             mock_pm.get_client.return_value = mock_client
@@ -4675,6 +4682,7 @@ class TestSetBedTemperatureAPI:
     async def test_client_failure_returns_500(self, async_client: AsyncClient, printer_factory):
         printer = await printer_factory(name="P", model="X1C")
         mock_client = MagicMock()
+        mock_client.call_with_ack = AckTracker().call
         mock_client.set_bed_temperature.return_value = False
         with patch("backend.app.api.routes.printers.printer_manager") as mock_pm:
             mock_pm.get_client.return_value = mock_client
@@ -4703,6 +4711,7 @@ class TestSetChamberTemperatureAPI:
         """Models with sensor but no heater must 400 before any client call."""
         printer = await printer_factory(name="P", model=sensor_only_model)
         mock_client = MagicMock()
+        mock_client.call_with_ack = AckTracker().call
         mock_client.set_chamber_temperature.return_value = True
         with patch("backend.app.api.routes.printers.printer_manager") as mock_pm:
             mock_pm.get_client.return_value = mock_client
@@ -4728,6 +4737,7 @@ class TestSetChamberTemperatureAPI:
         stored with: an H2D Pro is "H2D Pro" (#3335)."""
         printer = await printer_factory(name="P", model=heater_model)
         mock_client = MagicMock()
+        mock_client.call_with_ack = AckTracker().call
         mock_client.set_chamber_temperature.return_value = True
         with patch("backend.app.api.routes.printers.printer_manager") as mock_pm:
             mock_pm.get_client.return_value = mock_client
@@ -4741,6 +4751,7 @@ class TestSetChamberTemperatureAPI:
         """target=0 turns the chamber heater off."""
         printer = await printer_factory(name="P", model="H2D")
         mock_client = MagicMock()
+        mock_client.call_with_ack = AckTracker().call
         mock_client.set_chamber_temperature.return_value = True
         with patch("backend.app.api.routes.printers.printer_manager") as mock_pm:
             mock_pm.get_client.return_value = mock_client
@@ -4763,6 +4774,7 @@ class TestSetChamberTemperatureAPI:
         range out of reach."""
         printer = await printer_factory(name="P", model="H2D")
         mock_client = MagicMock()
+        mock_client.call_with_ack = AckTracker().call
         mock_client.set_chamber_temperature.return_value = True
         with patch("backend.app.api.routes.printers.printer_manager") as mock_pm:
             mock_pm.get_client.return_value = mock_client
@@ -4778,6 +4790,7 @@ class TestSetChamberTemperatureAPI:
     async def test_client_failure_returns_500(self, async_client: AsyncClient, printer_factory):
         printer = await printer_factory(name="P", model="H2D")
         mock_client = MagicMock()
+        mock_client.call_with_ack = AckTracker().call
         mock_client.set_chamber_temperature.return_value = False
         with patch("backend.app.api.routes.printers.printer_manager") as mock_pm:
             mock_pm.get_client.return_value = mock_client

@@ -119,7 +119,7 @@ class TestRfidRefreshAck:
 
         assert ok
         assert [c["command"] for c in sent] == ["ams_get_rfid"]
-        assert client._pending_rfid_acks == {}
+        assert client._acks.pending_count == 0
 
     @pytest.mark.asyncio
     async def test_unrelated_gcode_line_ack_is_not_taken_for_ours(self):

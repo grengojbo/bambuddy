@@ -24,6 +24,7 @@ import paho.mqtt.client as mqtt
 from backend.app.services.bmcu import hide_bmcu_hms
 from backend.app.services.hms_actions import HMSAction, get_actions_for_error_code
 from backend.app.services.hms_errors import alert_level_from_print_error, describe_fault
+from backend.app.services.mqtt_ack import DEFAULT_ACK_TIMEOUT, AckResult, AckStatus, AckTracker
 from backend.app.utils.ams_drying import ACTIVE_DRY_STATUSES, DRY_COUNTDOWN_STALL_SECONDS
 from backend.app.utils.ams_humidity import ams_humidity_percent
 from backend.app.utils.paho_teardown import discard_queued_publishes, retire_paho_client
@@ -1791,19 +1792,16 @@ class BambuMQTTClient:
         # An empty answer for a nozzle the printer doesn't have empties that
         # bucket alone.
         self._kprofiles_by_nozzle: dict[str, list] = {}
-        # Acks for K-profile *writes* (extrusion_cali_set / extrusion_cali_del),
-        # keyed by the sequence_id we sent. The printer echoes it back, measured
-        # on both an X1C and an H2D (#2718). Filled by the MQTT thread, drained
-        # by await_cali_ack.
-        self._pending_cali_acks: dict[str, dict | None] = {}
+        # The printer's answers to our commands, keyed by the sequence_id we
+        # sent: K-profile writes (#2718, await_cali_ack), RFID re-reads (#3206,
+        # _send_rfid_command) and anything sent through call_with_ack. Filled
+        # by the MQTT thread, drained by the waiting coroutine.
+        self._acks = AckTracker(serial_number)
         # Objects sent in skip_objects that the printer's s_obj list has not
         # shown yet: object id -> when it was sent. And the ids of each
         # command by its sequence_id, for its answer.
         self._unconfirmed_skips: dict[int, float] = {}
         self._skip_commands: dict[str, list[int]] = {}
-        # Acks for RFID re-reads (ams_get_rfid, and the M620 R gcode_line
-        # fallback), keyed the same way. Drained by ams_refresh_tray (#3206).
-        self._pending_rfid_acks: dict[str, dict | None] = {}
 
         # Identifies the one project_file *we* dispatched, so its echo on the
         # topic can be told apart from a slicer's. One-shot: consumed by the
@@ -2285,6 +2283,9 @@ class BambuMQTTClient:
         # waits on it — every callback path must fire it.
         if self._disconnection_event:
             self._disconnection_event.set()
+
+        # Nobody waiting on a command answer will get one over this session.
+        self._acks.fail_all(AckStatus.DISCONNECTED)
 
         # If we intentionally closed the socket for stale reconnect, don't broadcast
         # another state change — check_staleness() already set connected=False and
@@ -2895,9 +2896,7 @@ class BambuMQTTClient:
                         print_data.get("sequence_id"),
                     )
                     logger.debug("[%s] %s full response: %s", self.serial_number, cmd, print_data)
-                    ack_seq = str(print_data.get("sequence_id", ""))
-                    if ack_seq in self._pending_cali_acks:
-                        self._pending_cali_acks[ack_seq] = print_data
+                    self._acks.resolve(str(print_data.get("sequence_id", "")), cmd, print_data)
                 elif cmd == "skip_objects":
                     self._handle_skip_objects_answer(print_data)
                 elif cmd in ("extrusion_cali_sel", "ams_filament_setting"):
@@ -2947,15 +2946,16 @@ class BambuMQTTClient:
                 # INFO level so the body lands in support bundles by default.
                 elif cmd == "ams_filament_drying":
                     logger.info("[%s] ams_filament_drying response: %s", self.serial_number, print_data)
-                # RFID re-reads are user-initiated and rare, and a refusal was
-                # invisible until #3206 (X1Plus answering FAIL / ERROR STATE).
-                # gcode_line acks are only of interest when they answer our
-                # M620 R fallback, so those are matched by sequence_id alone.
+                # The answer to a command someone is waiting on (RFID re-reads,
+                # call_with_ack). Only armed sequence_ids match, so these are
+                # user-initiated and rare, and a refusal was invisible until
+                # #3206 (X1Plus answering FAIL / ERROR STATE). The K-profile
+                # writes above are already resolved and logged.
                 ack_seq = str(print_data.get("sequence_id", ""))
                 if (
-                    cmd in ("ams_get_rfid", "gcode_line")
-                    and ack_seq in self._pending_rfid_acks
-                    and "result" in print_data
+                    "result" in print_data
+                    and cmd not in ("extrusion_cali_set", "extrusion_cali_del")
+                    and self._acks.resolve(ack_seq, cmd, print_data)
                 ):
                     logger.info(
                         "[%s] %s response: result=%s reason=%s seq=%s",
@@ -2965,7 +2965,6 @@ class BambuMQTTClient:
                         print_data.get("reason", ""),
                         ack_seq,
                     )
-                    self._pending_rfid_acks[ack_seq] = print_data
                 # Check for developer mode probe response
                 if (
                     cmd == "ams_filament_setting"
@@ -7171,6 +7170,7 @@ class BambuMQTTClient:
         }
 
         command_json = json.dumps(command)
+        self._acks.note_publish(command["print"]["sequence_id"], "print_option")
         self._client.publish(self.topic_publish, command_json, qos=1)
         logger.debug("[%s] Set print option: %s=%s", self.serial_number, option_name, enabled)
 
@@ -7664,11 +7664,11 @@ class BambuMQTTClient:
         well under a second — measured at 70-150ms — which is comfortably
         before an async caller gets back to awaiting.
         """
-        self._pending_cali_acks[seq_id] = None
+        self._acks.arm(seq_id, command["print"]["command"])
         try:
             self._client.publish(self.topic_publish, json.dumps(command), qos=1)
         except Exception:
-            self._pending_cali_acks.pop(seq_id, None)
+            self._acks.discard(seq_id)
             raise
         return True
 
@@ -7680,25 +7680,12 @@ class BambuMQTTClient:
         detail string, because "no answer" is not evidence of rejection and
         older firmware may not answer at all. Callers that need certainty read
         the calibration table back.
-
-        Polled rather than event-driven on purpose: the ack is filled in by the
-        MQTT callback thread, and polling a dict costs one lookup every 50ms
-        for at most a few hundred milliseconds, against the cross-thread
-        event plumbing it would otherwise take.
         """
-        deadline = time.monotonic() + timeout
-        try:
-            while time.monotonic() < deadline:
-                ack = self._pending_cali_acks.get(seq_id)
-                if ack is not None:
-                    result = str(ack.get("result", "")).lower()
-                    reason = str(ack.get("reason", "") or "")
-                    if result == "fail":
-                        return (False, reason or "printer reported failure")
-                    return (True, reason)
-                await asyncio.sleep(0.05)
-        finally:
-            self._pending_cali_acks.pop(seq_id, None)
+        ack = await self._acks.wait(seq_id, timeout)
+        if ack.refused:
+            return (False, ack.reason)
+        if ack.status == AckStatus.ACCEPTED:
+            return (True, ack.reason)
         logger.warning("[%s] No ack for K-profile write seq=%s within %.1fs", self.serial_number, seq_id, timeout)
         return (True, CALI_ACK_UNCONFIRMED)
 
@@ -8070,6 +8057,25 @@ class BambuMQTTClient:
 
         return True
 
+    async def call_with_ack(
+        self,
+        send: Callable[..., object],
+        *args: object,
+        timeout: float = DEFAULT_ACK_TIMEOUT,
+        **kwargs: object,
+    ) -> AckResult:
+        """Run a command method of this client and wait for the printer's answer.
+
+        ``send`` is one of the existing methods that return True once the
+        command is published (``set_bed_temperature``, ``set_ams_filament_backup``,
+        ...). Commands published through ``send_gcode`` and ``_set_print_option``
+        are armed before they go out, so the result is the printer's own
+        verdict: ``refused`` with its reason, ``accepted``, or ``timeout`` when
+        it did not answer (older firmware does not answer everything, so that
+        is not a refusal). See AckTracker.call.
+        """
+        return await self._acks.call(send, *args, timeout=timeout, **kwargs)
+
     def send_gcode(self, gcode: str) -> bool:
         """Send G-code command(s) to the printer.
 
@@ -8087,6 +8093,7 @@ class BambuMQTTClient:
 
         self._sequence_id += 1
         command = {"print": {"command": "gcode_line", "param": gcode, "sequence_id": str(self._sequence_id)}}
+        self._acks.note_publish(command["print"]["sequence_id"], "gcode_line")
         # Use QoS 1 for reliable delivery (at least once)
         self._client.publish(self.topic_publish, json.dumps(command), qos=1)
         logger.debug("[%s] Sent G-code: %s...", self.serial_number, gcode[:50])
@@ -8698,23 +8705,14 @@ class BambuMQTTClient:
         self._sequence_id += 1
         seq_id = str(self._sequence_id)
         command = {"print": {**print_command, "sequence_id": seq_id}}
-        self._pending_rfid_acks[seq_id] = None
+        self._acks.arm(seq_id, print_command["command"])
         try:
             self._client.publish(self.topic_publish, json.dumps(command), qos=1)
-            deadline = time.monotonic() + timeout
-            while time.monotonic() < deadline:
-                ack = self._pending_rfid_acks.get(seq_id)
-                if ack is not None:
-                    if str(ack.get("result", "")).lower() == "fail":
-                        return str(ack.get("reason", "") or "") or "printer reported failure"
-                    return None
-                await asyncio.sleep(0.05)
-        finally:
-            self._pending_rfid_acks.pop(seq_id, None)
-        logger.info(
-            "[%s] No answer to %s seq=%s within %.1fs", self.serial_number, print_command["command"], seq_id, timeout
-        )
-        return None
+        except Exception:
+            self._acks.discard(seq_id)
+            raise
+        ack = await self._acks.wait(seq_id, timeout)
+        return ack.reason if ack.refused else None
 
     def ams_set_filament_setting(
         self,
