@@ -4171,6 +4171,24 @@ async def xy_jog(
     return {"success": True, "message": f"XY jog X{x:+.1f} Y{y:+.1f} mm sent"}
 
 
+# Below this the extruder grinds solid filament instead of pushing melt. The
+# firmware has its own cold-extrusion limit, but whether it refuses a gcode_line
+# jog, and says so, is not something to bet the extruder gear on.
+MIN_EXTRUDE_TEMP_C = 170
+
+
+def _active_nozzle_temp(state) -> float | None:
+    """Current temperature of the nozzle an extruder jog would move.
+
+    On a dual-nozzle printer ``nozzle_2`` is the right nozzle (extruder 0) and
+    ``nozzle`` the left; a single-nozzle printer only reports ``nozzle``.
+    """
+    temps = state.temperatures or {}
+    key = "nozzle_2" if "nozzle_2" in temps and state.active_extruder == 0 else "nozzle"
+    value = temps.get(key)
+    return float(value) if isinstance(value, (int, float)) else None
+
+
 @router.post("/{printer_id}/extruder-jog")
 async def extruder_jog(
     printer_id: int,
@@ -4182,10 +4200,10 @@ async def extruder_jog(
 ):
     """Extrude or retract filament by a relative distance.
 
-    No client-side cold-extrude guard: Bambu firmware refuses extrusion
-    below its min-extrude temperature, so a cold call is rejected at the
-    printer, not silently damaging the extruder gear. That refusal is passed
-    on as a 502 with the printer's reason rather than reported as sent.
+    Refused with a 409 while a print is active (a stray G1 E would ruin it)
+    and while the active nozzle is below MIN_EXTRUDE_TEMP_C or its
+    temperature is unknown. A refusal from the printer itself is passed on
+    as a 502 with its reason rather than reported as sent.
     """
     if distance == 0 or abs(distance) > 100:
         raise HTTPException(400, "Extruder movement must be non-zero and ≤ 100 mm")
@@ -4198,6 +4216,16 @@ async def extruder_jog(
     client = printer_manager.get_client(printer_id)
     if not client:
         raise HTTPException(400, "Printer not connected")
+    if client.state.state in printer_manager.ACTIVE_PRINT_STATES:
+        raise HTTPException(409, "The printer is printing; move the filament once it is idle")
+    nozzle_temp = _active_nozzle_temp(client.state)
+    if nozzle_temp is None:
+        raise HTTPException(409, "The nozzle temperature is unknown; wait for the printer to report it")
+    if nozzle_temp < MIN_EXTRUDE_TEMP_C:
+        raise HTTPException(
+            409,
+            f"The nozzle is at {nozzle_temp:.0f}°C; heat it to at least {MIN_EXTRUDE_TEMP_C}°C to move filament",
+        )
 
     ack = await client.call_with_ack(client.send_gcode, "\n".join(["M83", f"G1 E{distance:.2f} F300", "M82"]))
     confirmed = _printer_verdict(ack, "Failed to send extruder jog command")
