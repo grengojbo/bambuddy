@@ -5103,8 +5103,11 @@ class TestExtruderJogAPI:
         mock_client = MagicMock()
         mock_client.send_gcode.return_value = True
         mock_client.call_with_ack = AckTracker().call
+        mock_client.state.state = "IDLE"
+        mock_client.state.temperatures = {"nozzle": 220.0}
         with patch("backend.app.api.routes.printers.printer_manager") as mock_pm:
             mock_pm.get_client.return_value = mock_client
+            mock_pm.ACTIVE_PRINT_STATES = frozenset({"RUNNING", "PAUSE"})
             response = await async_client.post(f"/api/v1/printers/{printer.id}/extruder-jog?distance=5")
         assert response.status_code == 200
         sent = mock_client.send_gcode.call_args.args[0]
@@ -5119,8 +5122,11 @@ class TestExtruderJogAPI:
         mock_client = MagicMock()
         mock_client.send_gcode.return_value = True
         mock_client.call_with_ack = AckTracker().call
+        mock_client.state.state = "IDLE"
+        mock_client.state.temperatures = {"nozzle": 220.0}
         with patch("backend.app.api.routes.printers.printer_manager") as mock_pm:
             mock_pm.get_client.return_value = mock_client
+            mock_pm.ACTIVE_PRINT_STATES = frozenset({"RUNNING", "PAUSE"})
             response = await async_client.post(f"/api/v1/printers/{printer.id}/extruder-jog?distance=-3.5")
         assert response.status_code == 200
         sent = mock_client.send_gcode.call_args.args[0]
