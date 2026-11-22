@@ -4203,7 +4203,8 @@ async def extruder_jog(
 
     No client-side cold-extrude guard: Bambu firmware refuses extrusion
     below its min-extrude temperature, so a cold call is rejected at the
-    printer, not silently damaging the extruder gear.
+    printer, not silently damaging the extruder gear. That refusal is passed
+    on as a 502 with the printer's reason rather than reported as sent.
     """
     if distance == 0 or abs(distance) > 100:
         raise HTTPException(400, "Extruder movement must be non-zero and ≤ 100 mm")
@@ -4217,10 +4218,10 @@ async def extruder_jog(
     if not client:
         raise HTTPException(400, "Printer not connected")
 
-    if not client.send_gcode("\n".join(["M83", f"G1 E{distance:.2f} F300", "M82"])):
-        raise HTTPException(500, "Failed to send extruder jog command")
+    ack = await client.call_with_ack(client.send_gcode, "\n".join(["M83", f"G1 E{distance:.2f} F300", "M82"]))
+    confirmed = _printer_verdict(ack, "Failed to send extruder jog command")
 
-    return {"success": True, "message": f"Extruder jog {distance:+.1f} mm sent"}
+    return {"success": True, "message": f"Extruder jog {distance:+.1f} mm sent", "confirmed": confirmed}
 
 
 @router.post("/{printer_id}/home-axes")
