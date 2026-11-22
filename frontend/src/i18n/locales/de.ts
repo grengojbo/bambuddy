@@ -813,6 +813,16 @@ export default {
       stateOff: 'Deaktiviert',
       stateUnknown: 'Auf diesem Drucker nicht unterstützt',
     },
+    amsSettings: {
+      title: 'AMS-Einstellungen',
+      insertionRead: 'RFID beim Einlegen lesen',
+      insertionReadHelp: 'Bambu-Spulen beim Einlegen automatisch erkennen.',
+      startupRead: 'RFID beim Start lesen',
+      startupReadHelp: 'Alle Slots beim Einschalten des AMS lesen.',
+      remainCapacity: 'Restfilament schätzen',
+      remainCapacityHelp: 'Verfolgen, wie viel Filament auf Bambu-Spulen übrig ist.',
+      toastSaved: 'AMS-Einstellungen gespeichert',
+    },
     activeJobSlot: {
       title: 'Dieser Slot ist Filament {{n}} im aktiven Druck',
       ariaLabel: 'Aktiver Druck-Slot {{n}}',

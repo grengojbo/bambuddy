@@ -18,6 +18,7 @@ import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Toggle } from './Toggle';
+import type { AmsUserSettings } from '../api/client';
 import {
   computeBackupGroups,
   isAmsHtUnit,
@@ -36,7 +37,23 @@ interface AmsBackupModalProps {
   pending: boolean;
   onToggle: (next: boolean) => void;
   onClose: () => void;
+  /** Bambu Studio's "AMS Settings". Shown only once the printer has reported
+   *  all three: the command carries all of them, so an unknown one would be
+   *  overwritten with a guess. */
+  userSettings?: {
+    insertionRead: boolean | null | undefined;
+    startupRead: boolean | null | undefined;
+    remainCapacity: boolean | null | undefined;
+  };
+  userSettingsPending?: boolean;
+  onUserSettingsChange?: (next: AmsUserSettings) => void;
 }
+
+const USER_SETTING_ROWS = [
+  { key: 'insertionRead', label: 'printers.amsSettings.insertionRead', help: 'printers.amsSettings.insertionReadHelp' },
+  { key: 'startupRead', label: 'printers.amsSettings.startupRead', help: 'printers.amsSettings.startupReadHelp' },
+  { key: 'remainCapacity', label: 'printers.amsSettings.remainCapacity', help: 'printers.amsSettings.remainCapacityHelp' },
+] as const;
 
 /**
  * Compact slot label like "A·3" / "HT·1" — the ring is small, every char
@@ -184,6 +201,9 @@ export function AmsBackupModal({
   pending,
   onToggle,
   onClose,
+  userSettings,
+  userSettingsPending = false,
+  onUserSettingsChange,
 }: AmsBackupModalProps) {
   const { t } = useTranslation();
 
@@ -235,6 +255,18 @@ export function AmsBackupModal({
 
   const isOn = state === true;
   const isUnknown = state === null;
+
+  const knownUserSettings: AmsUserSettings | null =
+    userSettings &&
+    typeof userSettings.insertionRead === 'boolean' &&
+    typeof userSettings.startupRead === 'boolean' &&
+    typeof userSettings.remainCapacity === 'boolean'
+      ? {
+          insertionRead: userSettings.insertionRead,
+          startupRead: userSettings.startupRead,
+          remainCapacity: userSettings.remainCapacity,
+        }
+      : null;
 
   return (
     <div
@@ -294,6 +326,37 @@ export function AmsBackupModal({
             disabled={!canToggle || isUnknown || pending}
           />
         </div>
+
+        {knownUserSettings && (
+          <div
+            className="px-5 py-3 border-b"
+            style={{ borderColor, backgroundColor: sectionBg }}
+            data-testid="ams-user-settings"
+          >
+            <div className="mb-2 text-xs uppercase tracking-wider" style={{ color: textSecondary }}>
+              {t('printers.amsSettings.title')}
+            </div>
+            <div className="flex flex-col gap-3">
+              {USER_SETTING_ROWS.map((row) => (
+                <div key={row.key} className="flex items-center justify-between">
+                  <div className="min-w-0 mr-3">
+                    <div className="text-sm font-medium" style={{ color: textPrimary }}>
+                      {t(row.label)}
+                    </div>
+                    <p className="text-xs mt-0.5" style={{ color: textSecondary }}>
+                      {t(row.help)}
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={knownUserSettings[row.key]}
+                    onChange={(next) => onUserSettingsChange?.({ ...knownUserSettings, [row.key]: next })}
+                    disabled={!canToggle || userSettingsPending || !onUserSettingsChange}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto px-5 py-6">
           {pairs.length === 0 ? (

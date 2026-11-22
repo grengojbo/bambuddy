@@ -813,6 +813,16 @@ export default {
       stateOff: "Désactivé",
       stateUnknown: "Non pris en charge par cette imprimante",
     },
+    amsSettings: {
+      title: "Paramètres AMS",
+      insertionRead: "Lire le RFID à l’insertion",
+      insertionReadHelp: "Identifier automatiquement une bobine Bambu dès son insertion.",
+      startupRead: "Lire le RFID au démarrage",
+      startupReadHelp: "Lire tous les emplacements à la mise sous tension de l’AMS.",
+      remainCapacity: "Estimer le filament restant",
+      remainCapacityHelp: "Suivre la quantité de filament restante sur les bobines Bambu.",
+      toastSaved: "Paramètres AMS enregistrés",
+    },
     activeJobSlot: {
       title: 'Cet emplacement est le filament {{n}} dans l\'impression active',
       ariaLabel: 'Emplacement d\'impression active {{n}}',

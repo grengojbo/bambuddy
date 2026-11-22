@@ -1218,6 +1218,13 @@ class PrinterState:
     # which uses the old protocol path; field not yet found). Consumers must treat
     # None as "no opinion" — preserving today's behaviour, NOT as "disabled".
     ams_filament_backup: bool | None = None
+    # Bambu Studio's "AMS Settings": read RFID when a spool is inserted
+    # (print.ams.insert_flag), read every slot when the AMS powers on
+    # (power_on_flag), estimate the remaining filament (calibrate_remain_flag).
+    # None until the printer has reported the flag.
+    ams_insertion_read: bool | None = None
+    ams_startup_read: bool | None = None
+    ams_remain_capacity: bool | None = None
 
 
 # Stage name mapping from BambuStudio DeviceManager.cpp
@@ -3944,6 +3951,7 @@ class BambuMQTTClient:
                 log_label=self.serial_number,
                 annotate_exists=True,
             )
+            self._update_ams_user_settings(ams_data)
 
         self.state.raw_data["ams"] = merged_ams
 
@@ -6869,6 +6877,68 @@ class BambuMQTTClient:
         elif option_name == "auto_switch_filament":
             self.state.ams_filament_backup = enabled
 
+        return True
+
+    # Push field -> PrinterState attribute for the AMS Settings flags.
+    _AMS_USER_SETTING_FLAGS = (
+        ("insert_flag", "ams_insertion_read"),
+        ("power_on_flag", "ams_startup_read"),
+        ("calibrate_remain_flag", "ams_remain_capacity"),
+    )
+
+    def _update_ams_user_settings(self, ams_data: dict) -> None:
+        """Read the AMS Settings flags from a print.ams push.
+
+        Skipped for a few seconds after we sent ams_user_setting, so a push
+        already in flight does not flip the toggles back before the printer
+        has applied the change (the xcam hold pattern).
+        """
+        held_since = self._xcam_hold_start.get("ams_user_setting")
+        if held_since is not None and time.time() - held_since < self._xcam_hold_time:
+            return
+        for field_name, attr in self._AMS_USER_SETTING_FLAGS:
+            value = ams_data.get(field_name)
+            if isinstance(value, bool):
+                setattr(self.state, attr, value)
+
+    def set_ams_user_setting(self, insertion_read: bool, startup_read: bool, remain_capacity: bool) -> bool:
+        """Set Bambu Studio's three AMS Settings toggles in one command.
+
+        The firmware takes all three together. ``ams_id: -1`` applies them to
+        every AMS on the printer, as Bambu Studio does.
+
+        Returns:
+            True if the command was sent, False if not connected
+        """
+        if not self._client or not self.state.connected:
+            logger.warning("[%s] Cannot set AMS settings: not connected", self.serial_number)
+            return False
+
+        self._sequence_id += 1
+        command = {
+            "print": {
+                "command": "ams_user_setting",
+                "sequence_id": str(self._sequence_id),
+                "ams_id": -1,
+                "tray_read_option": bool(insertion_read),
+                "startup_read_option": bool(startup_read),
+                "calibrate_remain_flag": bool(remain_capacity),
+            }
+        }
+        self._acks.note_publish(command["print"]["sequence_id"], "ams_user_setting")
+        self._client.publish(self.topic_publish, json.dumps(command), qos=1)
+        logger.info(
+            "[%s] ams_user_setting: insertion=%s startup=%s remain=%s",
+            self.serial_number,
+            insertion_read,
+            startup_read,
+            remain_capacity,
+        )
+
+        self._xcam_hold_start["ams_user_setting"] = time.time()
+        self.state.ams_insertion_read = bool(insertion_read)
+        self.state.ams_startup_read = bool(startup_read)
+        self.state.ams_remain_capacity = bool(remain_capacity)
         return True
 
     def set_ams_filament_backup(self, enabled: bool) -> bool:

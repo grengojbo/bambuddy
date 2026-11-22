@@ -813,6 +813,16 @@ export default {
       stateOff: 'Devre dışı',
       stateUnknown: 'Bu yazıcıda desteklenmiyor',
     },
+    amsSettings: {
+      title: 'AMS ayarları',
+      insertionRead: 'Takıldığında RFID oku',
+      insertionReadHelp: 'Bambu makarası takıldığında otomatik tanı.',
+      startupRead: 'Başlangıçta RFID oku',
+      startupReadHelp: 'AMS açıldığında tüm yuvaları oku.',
+      remainCapacity: 'Kalan filamenti tahmin et',
+      remainCapacityHelp: 'Bambu makaralarında kalan filament miktarını izle.',
+      toastSaved: 'AMS ayarları kaydedildi',
+    },
     activeJobSlot: {
       title: 'Bu slot, aktif baskıdaki {{n}} numaralı filament',
       ariaLabel: 'Aktif baskı slotu {{n}}',

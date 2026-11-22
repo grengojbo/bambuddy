@@ -818,6 +818,16 @@ export default {
       stateOff: 'Inaktiverad',
       stateUnknown: 'Stöds inte på denna skrivare',
     },
+    amsSettings: {
+      title: 'AMS-inställningar',
+      insertionRead: 'Läs RFID vid isättning',
+      insertionReadHelp: 'Känn igen en Bambu-spole automatiskt när den sätts i.',
+      startupRead: 'Läs RFID vid start',
+      startupReadHelp: 'Läs alla platser när AMS startar.',
+      remainCapacity: 'Uppskatta kvarvarande filament',
+      remainCapacityHelp: 'Håll koll på hur mycket filament som finns kvar på Bambu-spolar.',
+      toastSaved: 'AMS-inställningar sparade',
+    },
     activeJobSlot: {
       title: 'Detta fack är filament {{n}} i den aktiva utskriften',
       ariaLabel: 'Aktivt fack {{n}}',

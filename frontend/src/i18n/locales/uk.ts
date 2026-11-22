@@ -817,6 +817,16 @@ export default {
       stateOff: "Вимкнено",
       stateUnknown: "Не підтримується на цьому принтері",
     },
+    amsSettings: {
+      title: "Налаштування AMS",
+      insertionRead: "Зчитувати RFID при вставці",
+      insertionReadHelp: "Автоматично розпізнавати котушку Bambu, щойно її вставлено.",
+      startupRead: "Зчитувати RFID при ввімкненні",
+      startupReadHelp: "Перечитувати всі слоти, коли AMS вмикається.",
+      remainCapacity: "Оцінювати залишок філаменту",
+      remainCapacityHelp: "Відстежувати, скільки філаменту лишилось на котушках Bambu.",
+      toastSaved: "Налаштування AMS збережено",
+    },
     activeJobSlot: {
       title: "Цей слот відповідає філаменту {{n}} в поточному завданні друку",
       ariaLabel: "Слот {{n}} поточного завдання друку",

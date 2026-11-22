@@ -5,7 +5,7 @@
  * style); lone slots are intentionally suppressed.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent, within } from '@testing-library/react';
 
 import { render } from '../utils';
 import { AmsBackupModal } from '../../components/AmsBackupModal';
@@ -243,5 +243,62 @@ describe('AmsBackupModal', () => {
 
     expect(screen.queryByText('R')).not.toBeInTheDocument();
     expect(screen.queryByText('L')).not.toBeInTheDocument();
+  });
+
+  describe('AMS settings', () => {
+    const base = {
+      isOpen: true,
+      state: true,
+      amsUnits: makeAmsUnits(),
+      amsExtruderMap: undefined,
+      isDualNozzle: false,
+      pending: false,
+      onToggle: vi.fn(),
+      onClose: vi.fn(),
+    };
+
+    it('is hidden until the printer has reported all three flags', () => {
+      render(
+        <AmsBackupModal
+          {...base}
+          canToggle
+          userSettings={{ insertionRead: true, startupRead: null, remainCapacity: false }}
+          onUserSettingsChange={vi.fn()}
+        />,
+      );
+      expect(screen.queryByTestId('ams-user-settings')).toBeNull();
+    });
+
+    it('sends all three flags with the toggled one changed', () => {
+      const onChange = vi.fn();
+      render(
+        <AmsBackupModal
+          {...base}
+          canToggle
+          userSettings={{ insertionRead: true, startupRead: false, remainCapacity: true }}
+          onUserSettingsChange={onChange}
+        />,
+      );
+      const switches = within(screen.getByTestId('ams-user-settings')).getAllByRole('switch');
+      expect(switches.map((s) => s.getAttribute('aria-checked'))).toEqual(['true', 'false', 'true']);
+
+      fireEvent.click(switches[1]);
+
+      expect(onChange).toHaveBeenCalledWith({ insertionRead: true, startupRead: true, remainCapacity: true });
+    });
+
+    it('cannot be changed without control permission', () => {
+      render(
+        <AmsBackupModal
+          {...base}
+          canToggle={false}
+          userSettings={{ insertionRead: true, startupRead: true, remainCapacity: true }}
+          onUserSettingsChange={vi.fn()}
+        />,
+      );
+      for (const s of within(screen.getByTestId('ams-user-settings')).getAllByRole('switch')) {
+        expect(s).toBeDisabled();
+      }
+    });
   });
 });
