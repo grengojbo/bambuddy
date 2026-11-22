@@ -826,6 +826,16 @@ export default {
       stateOff: '已停用',
       stateUnknown: '此印表機不支援',
     },
+    amsSettings: {
+      title: 'AMS 設定',
+      insertionRead: '插入時讀取 RFID',
+      insertionReadHelp: '插入 Bambu 線盤時自動辨識。',
+      startupRead: '開機時讀取 RFID',
+      startupReadHelp: 'AMS 開機時讀取所有槽位。',
+      remainCapacity: '估算剩餘耗材',
+      remainCapacityHelp: '追蹤 Bambu 線盤的剩餘耗材量。',
+      toastSaved: 'AMS 設定已儲存',
+    },
     activeJobSlot: {
       title: '此料槽在目前列印中是耗材 {{n}}',
       ariaLabel: '目前列印料槽 {{n}}',

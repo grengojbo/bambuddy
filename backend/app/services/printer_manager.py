@@ -1829,6 +1829,9 @@ def printer_state_to_dict(
         # True / False / None. None = unknown or unsupported (A1 family). UI
         # uses this to drive the small status icon next to the AMS drying icon.
         "ams_filament_backup": state.ams_filament_backup,
+        "ams_insertion_read": state.ams_insertion_read,
+        "ams_startup_read": state.ams_startup_read,
+        "ams_remain_capacity": state.ams_remain_capacity,
         # Calibration stage tracking
         "stg_cur": state.stg_cur,
         "stg_cur_name": get_derived_status_name(state, model),

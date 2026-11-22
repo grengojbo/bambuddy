@@ -833,6 +833,16 @@ export default {
       stateOff: 'Disabled',
       stateUnknown: 'Unsupported on this printer',
     },
+    amsSettings: {
+      title: 'AMS settings',
+      insertionRead: 'Read RFID on insertion',
+      insertionReadHelp: 'Identify a Bambu spool automatically when it is inserted.',
+      startupRead: 'Read RFID on startup',
+      startupReadHelp: 'Read every slot when the AMS powers on.',
+      remainCapacity: 'Estimate remaining filament',
+      remainCapacityHelp: 'Track how much filament is left on Bambu spools.',
+      toastSaved: 'AMS settings saved',
+    },
     activeJobSlot: {
       title: 'This slot is filament {{n}} in the active print',
       ariaLabel: 'Active print slot {{n}}',

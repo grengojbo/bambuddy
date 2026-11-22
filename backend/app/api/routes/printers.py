@@ -957,6 +957,9 @@ async def _printer_status(db: AsyncSession, printer: Printer) -> PrinterStatus:
         firmware_version=state.firmware_version,
         developer_mode=state.developer_mode if state else None,
         ams_filament_backup=state.ams_filament_backup if state else None,
+        ams_insertion_read=state.ams_insertion_read if state else None,
+        ams_startup_read=state.ams_startup_read if state else None,
+        ams_remain_capacity=state.ams_remain_capacity if state else None,
         awaiting_plate_clear=printer_manager.is_awaiting_plate_clear(printer_id),
         supports_drying=supports_drying(printer.model, state.firmware_version),
         supports_drying_while_printing=supports_drying_while_printing(printer.model, state.firmware_version),
@@ -2575,6 +2578,41 @@ async def set_ams_backup(
     confirmed = _printer_verdict(ack, "Failed to send command to printer")
 
     return {"success": True, "ams_filament_backup": enabled, "confirmed": confirmed}
+
+
+@router.post("/{printer_id}/ams-settings")
+async def set_ams_settings(
+    printer_id: int,
+    insertion_read: bool = Query(..., description="Read the RFID tag when a spool is inserted"),
+    startup_read: bool = Query(..., description="Read every slot when the AMS powers on"),
+    remain_capacity: bool = Query(..., description="Estimate the remaining filament on each spool"),
+    _=RequirePrinterPermissionIfAuthEnabled(Permission.PRINTERS_CONTROL),
+    db: AsyncSession = Depends(get_db, scope="function"),
+):
+    """Set Bambu Studio's "AMS Settings" toggles.
+
+    The firmware takes the three together (``ams_user_setting``), so all three
+    are required: send the current value for the ones not being changed.
+    """
+    result = await db.execute(select(Printer).where(Printer.id == printer_id))
+    printer = result.scalar_one_or_none()
+    if not printer:
+        raise HTTPException(404, "Printer not found")
+
+    client = printer_manager.get_client(printer_id)
+    if not client or not client.state.connected:
+        raise HTTPException(400, "Printer not connected")
+
+    ack = await client.call_with_ack(client.set_ams_user_setting, insertion_read, startup_read, remain_capacity)
+    confirmed = _printer_verdict(ack, "Failed to send command to printer")
+
+    return {
+        "success": True,
+        "ams_insertion_read": insertion_read,
+        "ams_startup_read": startup_read,
+        "ams_remain_capacity": remain_capacity,
+        "confirmed": confirmed,
+    }
 
 
 @router.get("/{printer_id}/inventory-remain")

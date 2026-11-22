@@ -825,6 +825,16 @@ export default {
       stateOff: '無効',
       stateUnknown: 'このプリンターでは未対応',
     },
+    amsSettings: {
+      title: 'AMS設定',
+      insertionRead: '挿入時にRFIDを読み取る',
+      insertionReadHelp: 'Bambuスプールを挿入すると自動で識別します。',
+      startupRead: '起動時にRFIDを読み取る',
+      startupReadHelp: 'AMSの電源投入時に全スロットを読み取ります。',
+      remainCapacity: '残量を推定する',
+      remainCapacityHelp: 'Bambuスプールのフィラメント残量を追跡します。',
+      toastSaved: 'AMS設定を保存しました',
+    },
     activeJobSlot: {
       title: 'このスロットはアクティブな印刷のフィラメント {{n}} です',
       ariaLabel: 'アクティブ印刷スロット {{n}}',

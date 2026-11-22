@@ -788,6 +788,16 @@ export default {
       stateOff: '비활성화됨',
       stateUnknown: '이 프린터에서 지원되지 않음'
     },
+    amsSettings: {
+      title: 'AMS 설정',
+      insertionRead: '삽입 시 RFID 읽기',
+      insertionReadHelp: 'Bambu 스풀을 넣으면 자동으로 인식합니다.',
+      startupRead: '시작 시 RFID 읽기',
+      startupReadHelp: 'AMS 전원이 켜질 때 모든 슬롯을 읽습니다.',
+      remainCapacity: '남은 필라멘트 추정',
+      remainCapacityHelp: 'Bambu 스풀에 남은 필라멘트 양을 추적합니다.',
+      toastSaved: 'AMS 설정이 저장되었습니다',
+    },
     activeJobSlot: {
       title: '이 슬롯은 활성 인쇄의 필라멘트 {{n}}입니다',
       ariaLabel: '활성 인쇄 슬롯 {{n}}'

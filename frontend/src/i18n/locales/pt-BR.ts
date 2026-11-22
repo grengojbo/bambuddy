@@ -826,6 +826,16 @@ export default {
       stateOff: 'Desativado',
       stateUnknown: 'Não suportado nesta impressora',
     },
+    amsSettings: {
+      title: 'Configurações do AMS',
+      insertionRead: 'Ler RFID ao inserir',
+      insertionReadHelp: 'Identificar automaticamente um carretel Bambu ao inseri-lo.',
+      startupRead: 'Ler RFID ao ligar',
+      startupReadHelp: 'Ler todos os slots quando o AMS liga.',
+      remainCapacity: 'Estimar filamento restante',
+      remainCapacityHelp: 'Acompanhar quanto filamento resta nos carretéis Bambu.',
+      toastSaved: 'Configurações do AMS salvas',
+    },
     activeJobSlot: {
       title: 'Este slot é o filamento {{n}} na impressão ativa',
       ariaLabel: 'Slot de impressão ativa {{n}}',

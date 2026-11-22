@@ -672,6 +672,13 @@ export interface UsbCamera {
   formats?: string[];
 }
 
+/** Bambu Studio's "AMS Settings" toggles; the printer takes all three together. */
+export interface AmsUserSettings {
+  insertionRead: boolean;
+  startupRead: boolean;
+  remainCapacity: boolean;
+}
+
 export interface PrinterStatus {
   id: number;
   name: string;
@@ -792,6 +799,10 @@ export interface PrinterStatus {
   // AMS Filament Backup ("auto-switch" to a backup spool when one runs out).
   // true = ON, false = OFF, null = unknown / unsupported (A1 family).
   ams_filament_backup: boolean | null;
+  // Bambu Studio's "AMS Settings"; null until the printer reports them.
+  ams_insertion_read?: boolean | null;
+  ams_startup_read?: boolean | null;
+  ams_remain_capacity?: boolean | null;
   // Queue: printer is awaiting user ack that the build plate was cleared after a
   // finished/failed print. Persisted across restarts (#961).
   awaiting_plate_clear: boolean;
@@ -5650,6 +5661,12 @@ export const api = {
   setAmsFilamentBackup: (printerId: number, enabled: boolean) =>
     request<{ success: boolean; ams_filament_backup: boolean }>(
       `/printers/${printerId}/ams-backup?enabled=${enabled}`,
+      { method: 'POST' }
+    ),
+  setAmsUserSettings: (printerId: number, settings: AmsUserSettings) =>
+    request<{ success: boolean; confirmed: boolean }>(
+      `/printers/${printerId}/ams-settings?insertion_read=${settings.insertionRead}` +
+        `&startup_read=${settings.startupRead}&remain_capacity=${settings.remainCapacity}`,
       { method: 'POST' }
     ),
 

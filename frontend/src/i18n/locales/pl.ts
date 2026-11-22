@@ -833,6 +833,16 @@ export default {
       stateOff: 'Wyłączony',
       stateUnknown: 'Nieobsługiwany na tej drukarce',
     },
+    amsSettings: {
+      title: 'Ustawienia AMS',
+      insertionRead: 'Odczyt RFID po włożeniu',
+      insertionReadHelp: 'Automatycznie rozpoznawaj szpulę Bambu po włożeniu.',
+      startupRead: 'Odczyt RFID przy starcie',
+      startupReadHelp: 'Odczytaj wszystkie sloty po włączeniu AMS.',
+      remainCapacity: 'Szacuj pozostały filament',
+      remainCapacityHelp: 'Śledź, ile filamentu zostało na szpulach Bambu.',
+      toastSaved: 'Zapisano ustawienia AMS',
+    },
     activeJobSlot: {
       title: 'Ten slot to filament {{n}} w aktywnym wydruku',
       ariaLabel: 'Slot aktywnego wydruku {{n}}',

@@ -187,7 +187,7 @@ import { PrinterHASensorRow } from '../components/PrinterHASensorRow';
 import { AMSHistoryModal } from '../components/AMSHistoryModal';
 import { AmsBackupModal } from '../components/AmsBackupModal';
 import { HeaterHistoryModal } from '../components/HeaterHistoryModal';
-import type { HeaterSensorKind } from '../api/client';
+import type { AmsUserSettings, HeaterSensorKind } from '../api/client';
 import { FilamentHoverCard, EmptySlotHoverCard } from '../components/FilamentHoverCard';
 import { AssignSpoolModal } from '../components/AssignSpoolModal';
 import { ConfigureAmsSlotModal } from '../components/ConfigureAmsSlotModal';
@@ -2839,6 +2839,16 @@ function PrinterCard({
       queryClient.invalidateQueries({ queryKey: ['printerStatus', printer.id] });
       queryClient.invalidateQueries({ queryKey: ['printer-status', printer.id] });
       showToast(t(enabled ? 'printers.amsBackup.toastEnabled' : 'printers.amsBackup.toastDisabled'), 'success');
+    },
+    onError: (error: Error) => showToast(error.message || t('printers.toast.failedToSendCommand'), 'error'),
+  });
+
+  const setAmsUserSettingsMutation = useMutation({
+    mutationFn: (next: AmsUserSettings) => api.setAmsUserSettings(printer.id, next),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['printerStatus', printer.id] });
+      queryClient.invalidateQueries({ queryKey: ['printer-status', printer.id] });
+      showToast(t('printers.amsSettings.toastSaved'), 'success');
     },
     onError: (error: Error) => showToast(error.message || t('printers.toast.failedToSendCommand'), 'error'),
   });
@@ -7490,6 +7500,13 @@ function PrinterCard({
           pending={setAmsBackupMutation.isPending}
           onToggle={(next) => setAmsBackupMutation.mutate(next)}
           onClose={() => setAmsBackupModalOpen(false)}
+          userSettings={{
+            insertionRead: status.ams_insertion_read,
+            startupRead: status.ams_startup_read,
+            remainCapacity: status.ams_remain_capacity,
+          }}
+          userSettingsPending={setAmsUserSettingsMutation.isPending}
+          onUserSettingsChange={(next) => setAmsUserSettingsMutation.mutate(next)}
         />
       )}
 

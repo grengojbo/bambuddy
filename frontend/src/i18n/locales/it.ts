@@ -826,6 +826,16 @@ export default {
       stateOff: 'Disabilitato',
       stateUnknown: 'Non supportato su questa stampante',
     },
+    amsSettings: {
+      title: 'Impostazioni AMS',
+      insertionRead: 'Leggi RFID all’inserimento',
+      insertionReadHelp: 'Riconosci automaticamente una bobina Bambu quando viene inserita.',
+      startupRead: 'Leggi RFID all’avvio',
+      startupReadHelp: 'Leggi tutti gli slot all’accensione dell’AMS.',
+      remainCapacity: 'Stima filamento residuo',
+      remainCapacityHelp: 'Tieni traccia del filamento rimasto sulle bobine Bambu.',
+      toastSaved: 'Impostazioni AMS salvate',
+    },
     activeJobSlot: {
       title: 'Questo slot è il filamento {{n}} nella stampa attiva',
       ariaLabel: 'Slot stampa attiva {{n}}',

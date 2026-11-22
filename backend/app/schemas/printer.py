@@ -559,6 +559,11 @@ class PrinterStatus(BaseModel):
     # True = ON, False = OFF, None = unknown / unsupported (A1 family — protocol field
     # not yet identified). UI treats None as "status unavailable", not as a hard disable.
     ams_filament_backup: bool | None = None
+    # Bambu Studio's "AMS Settings" (RFID read on insertion / on power-on,
+    # remaining-filament estimate). None = the printer has not reported it.
+    ams_insertion_read: bool | None = None
+    ams_startup_read: bool | None = None
+    ams_remain_capacity: bool | None = None
     # Queue: printer is awaiting the user to acknowledge the build plate is cleared
     # after a finished/failed print. Persisted across restarts (#961).
     awaiting_plate_clear: bool = False

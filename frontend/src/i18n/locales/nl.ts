@@ -831,6 +831,16 @@ export default {
       stateOff: 'Uitgeschakeld',
       stateUnknown: 'Niet ondersteund op deze printer',
     },
+    amsSettings: {
+      title: 'AMS-instellingen',
+      insertionRead: 'RFID lezen bij plaatsen',
+      insertionReadHelp: 'Een Bambu-spoel automatisch herkennen zodra die wordt geplaatst.',
+      startupRead: 'RFID lezen bij opstarten',
+      startupReadHelp: 'Alle sleuven lezen wanneer de AMS aangaat.',
+      remainCapacity: 'Resterend filament schatten',
+      remainCapacityHelp: 'Bijhouden hoeveel filament er op Bambu-spoelen over is.',
+      toastSaved: 'AMS-instellingen opgeslagen',
+    },
     activeJobSlot: {
       title: 'Deze sleuf is filament {{n}} in de actieve afdruk',
       ariaLabel: 'Actieve afdruksleuf {{n}}',
