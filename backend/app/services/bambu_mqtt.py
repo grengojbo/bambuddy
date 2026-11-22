@@ -23,7 +23,7 @@ import paho.mqtt.client as mqtt
 
 from backend.app.services.hms_actions import HMSAction, get_actions_for_error_code
 from backend.app.services.hms_errors import alert_level_from_print_error, describe_fault
-from backend.app.services.mqtt_ack import AckStatus, AckTracker
+from backend.app.services.mqtt_ack import DEFAULT_ACK_TIMEOUT, AckResult, AckStatus, AckTracker
 from backend.app.utils.ams_drying import ACTIVE_DRY_STATUSES, DRY_COUNTDOWN_STALL_SECONDS
 from backend.app.utils.ams_humidity import ams_humidity_percent
 from backend.app.utils.paho_teardown import discard_queued_publishes, retire_paho_client
@@ -6855,6 +6855,7 @@ class BambuMQTTClient:
         }
 
         command_json = json.dumps(command)
+        self._acks.note_publish(command["print"]["sequence_id"], "print_option")
         self._client.publish(self.topic_publish, command_json, qos=1)
         logger.debug("[%s] Set print option: %s=%s", self.serial_number, option_name, enabled)
 
@@ -7727,6 +7728,25 @@ class BambuMQTTClient:
 
         return True
 
+    async def call_with_ack(
+        self,
+        send: Callable[..., object],
+        *args: object,
+        timeout: float = DEFAULT_ACK_TIMEOUT,
+        **kwargs: object,
+    ) -> AckResult:
+        """Run a command method of this client and wait for the printer's answer.
+
+        ``send`` is one of the existing methods that return True once the
+        command is published (``set_bed_temperature``, ``set_ams_filament_backup``,
+        ...). Commands published through ``send_gcode`` and ``_set_print_option``
+        are armed before they go out, so the result is the printer's own
+        verdict: ``refused`` with its reason, ``accepted``, or ``timeout`` when
+        it did not answer (older firmware does not answer everything, so that
+        is not a refusal). See AckTracker.call.
+        """
+        return await self._acks.call(send, *args, timeout=timeout, **kwargs)
+
     def send_gcode(self, gcode: str) -> bool:
         """Send G-code command(s) to the printer.
 
@@ -7744,6 +7764,7 @@ class BambuMQTTClient:
 
         self._sequence_id += 1
         command = {"print": {"command": "gcode_line", "param": gcode, "sequence_id": str(self._sequence_id)}}
+        self._acks.note_publish(command["print"]["sequence_id"], "gcode_line")
         # Use QoS 1 for reliable delivery (at least once)
         self._client.publish(self.topic_publish, json.dumps(command), qos=1)
         logger.debug("[%s] Sent G-code: %s...", self.serial_number, gcode[:50])

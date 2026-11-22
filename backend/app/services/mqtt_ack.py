@@ -35,8 +35,9 @@ logger = logging.getLogger(__name__)
 
 # Default time the printer has to answer. Measured answers are 11 ms
 # (ams_get_rfid, #3206) to 150 ms (extrusion_cali_set, #2718); the margin is
-# for a busy printer mid-print.
-DEFAULT_ACK_TIMEOUT = 5.0
+# for a busy printer mid-print. Kept short because firmware that never answers
+# a command makes every caller wait this long (the RFID refresh uses 3 s too).
+DEFAULT_ACK_TIMEOUT = 3.0
 
 _POLL_INTERVAL = 0.05
 

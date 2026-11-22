@@ -71,6 +71,7 @@ from backend.app.services.bambu_ftp import (
     list_files_result_async,
 )
 from backend.app.services.hms_actions import HMSAction
+from backend.app.services.mqtt_ack import AckResult, AckStatus
 from backend.app.services.pause_eta import next_pause
 from backend.app.services.print_storage import ftp_probe_paths, print_file_reachable_over_ftp
 from backend.app.services.printer_diagnostic import run_connection_diagnostic
@@ -2523,6 +2524,22 @@ async def set_print_option(
     }
 
 
+def _printer_verdict(ack: AckResult, not_sent_detail: str) -> bool:
+    """Raise for a command the printer refused or never got.
+
+    Returns whether the printer confirmed it. False means it went out but no
+    answer came back in time — not an error, because older firmware does not
+    answer every command.
+    """
+    if ack.status == AckStatus.NOT_SENT:
+        raise HTTPException(500, not_sent_detail)
+    if ack.refused:
+        raise HTTPException(502, f"Printer refused the command: {ack.reason}")
+    if ack.status == AckStatus.DISCONNECTED:
+        raise HTTPException(503, "Printer disconnected before answering the command")
+    return ack.confirmed
+
+
 @router.post("/{printer_id}/ams-backup")
 async def set_ams_backup(
     printer_id: int,
@@ -2540,11 +2557,10 @@ async def set_ams_backup(
     if not client or not client.state.connected:
         raise HTTPException(400, "Printer not connected")
 
-    success = client.set_ams_filament_backup(enabled)
-    if not success:
-        raise HTTPException(500, "Failed to send command to printer")
+    ack = await client.call_with_ack(client.set_ams_filament_backup, enabled)
+    confirmed = _printer_verdict(ack, "Failed to send command to printer")
 
-    return {"success": True, "ams_filament_backup": enabled}
+    return {"success": True, "ams_filament_backup": enabled, "confirmed": confirmed}
 
 
 @router.get("/{printer_id}/inventory-remain")
@@ -3818,11 +3834,10 @@ async def set_nozzle_temperature(
     if not client:
         raise HTTPException(400, "Printer not connected")
 
-    success = client.set_nozzle_temperature(target, nozzle)
-    if not success:
-        raise HTTPException(500, "Failed to set nozzle temperature")
+    ack = await client.call_with_ack(client.set_nozzle_temperature, target, nozzle)
+    confirmed = _printer_verdict(ack, "Failed to set nozzle temperature")
 
-    return {"success": True, "message": f"Nozzle temperature set to {target}°C"}
+    return {"success": True, "message": f"Nozzle temperature set to {target}°C", "confirmed": confirmed}
 
 
 @router.post("/{printer_id}/temperature/bed")
@@ -3842,11 +3857,10 @@ async def set_bed_temperature(
     if not client:
         raise HTTPException(400, "Printer not connected")
 
-    success = client.set_bed_temperature(target)
-    if not success:
-        raise HTTPException(500, "Failed to set bed temperature")
+    ack = await client.call_with_ack(client.set_bed_temperature, target)
+    confirmed = _printer_verdict(ack, "Failed to set bed temperature")
 
-    return {"success": True, "message": f"Bed temperature set to {target}°C"}
+    return {"success": True, "message": f"Bed temperature set to {target}°C", "confirmed": confirmed}
 
 
 @router.post("/{printer_id}/temperature/chamber")
@@ -3880,11 +3894,10 @@ async def set_chamber_temperature(
     if not client:
         raise HTTPException(400, "Printer not connected")
 
-    success = client.set_chamber_temperature(target)
-    if not success:
-        raise HTTPException(500, "Failed to set chamber temperature")
+    ack = await client.call_with_ack(client.set_chamber_temperature, target)
+    confirmed = _printer_verdict(ack, "Failed to set chamber temperature")
 
-    return {"success": True, "message": f"Chamber temperature set to {target}°C"}
+    return {"success": True, "message": f"Chamber temperature set to {target}°C", "confirmed": confirmed}
 
 
 @router.post("/{printer_id}/fan-speed")
